@@ -1,0 +1,213 @@
+{
+  "generated_at": "2026-06-10T10:02:55.086787",
+  "engine": "Дүрэм-суурилсан",
+  "total_items_analyzed": 20,
+  "summary": {
+    "price_increase": 20,
+    "price_decrease": 0,
+    "no_change": 0,
+    "urgent": 20
+  },
+  "results": [
+    {
+      "item_id": "Item_1475",
+      "current_price": 25383,
+      "suggested_price": 29190,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    },
+    {
+      "item_id": "Item_1857",
+      "current_price": 28766,
+      "suggested_price": 33080,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    },
+    {
+      "item_id": "Item_2210",
+      "current_price": 25410,
+      "suggested_price": 29221,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    },
+    {
+      "item_id": "Item_2211",
+      "current_price": 29023,
+      "suggested_price": 33376,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    },
+    {
+      "item_id": "Item_3863",
+      "current_price": 4240,
+      "suggested_price": 4876,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    },
+    {
+      "item_id": "Item_3865",
+      "current_price": 2561,
+      "suggested_price": 2945,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    },
+    {
+      "item_id": "Item_3866",
+      "current_price": 2613,
+      "suggested_price": 3004,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    },
+    {
+      "item_id": "Item_3867",
+      "current_price": 2618,
+      "suggested_price": 3010,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    },
+    {
+      "item_id": "Item_3868",
+      "current_price": 2546,
+      "suggested_price": 2927,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    },
+    {
+      "item_id": "Item_3869",
+      "current_price": 3438,
+      "suggested_price": 3953,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    },
+    {
+      "item_id": "Item_4147",
+      "current_price": 33000,
+      "suggested_price": 37950,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    },
+    {
+      "item_id": "Item_4148",
+      "current_price": 44864,
+      "suggested_price": 51593,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    },
+    {
+      "item_id": "Item_4150",
+      "current_price": 34860,
+      "suggested_price": 40089,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    },
+    {
+      "item_id": "Item_565",
+      "current_price": 22820,
+      "suggested_price": 26242,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    },
+    {
+      "item_id": "Item_890",
+      "current_price": 14505,
+      "suggested_price": 16680,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    },
+    {
+      "item_id": "Item_1452",
+      "current_price": 22499,
+      "suggested_price": 25873,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    },
+    {
+      "item_id": "Item_1683",
+      "current_price": 31981,
+      "suggested_price": 36778,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    },
+    {
+      "item_id": "Item_1825",
+      "current_price": 10504,
+      "suggested_price": 12079,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    },
+    {
+      "item_id": "Item_1837",
+      "current_price": 19011,
+      "suggested_price": 21862,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    },
+    {
+      "item_id": "Item_1845",
+      "current_price": 57823,
+      "suggested_price": 66496,
+      "change_pct": "+15%",
+      "action": "Үнэ нэмэх",
+      "reason": "Алдагдалтай зарагдаж байна. Үнийг нэмэх шаардлагатай.",
+      "urgency": "Яаралтай",
+      "engine": "rule-based"
+    }
+  ]
+}
