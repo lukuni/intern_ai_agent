@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Үнийн Санал Болгох Агент</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #f5f4f0;
+    --surface:   #ffffff;
+    --border:    rgba(0,0,0,0.10);
+    --border-md: rgba(0,0,0,0.18);
+    --text:      #1a1a18;
+    --muted:     #6b6a65;
+    --hint:      #9e9d98;
+    --green:     #1D9E75;
+    --green-bg:  #E1F5EE;
+    --green-dk:  #0F6E56;
+    --amber:     #BA7517;
+    --amber-bg:  #FAEEDA;
+    --red:       #A32D2D;
+    --red-bg:    #FCEBEB;
+    --blue:      #185FA5;
+    --blue-bg:   #E6F1FB;
+    --radius:    10px;
+    --radius-sm: 6px;
+    --mono:      'Courier New', monospace;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── Layout ── */
+  .shell { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 2rem;
+  }
+  .topbar h1 { font-size: 17px; font-weight: 600; }
+  .topbar p  { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .badge-engine {
+    font-size: 11px; font-weight: 600; padding: 4px 10px;
+    border-radius: 20px; background: var(--green-bg); color: var(--green-dk);
+  }
+
+  .layout { display: grid; grid-template-columns: 320px 1fr; gap: 1.5rem; align-items: start; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: var(--radius); padding: 1.1rem 1.25rem; margin-bottom: 1rem;
+  }
+  .card:last-child { margin-bottom: 0; }
+  .card-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--hint); margin-bottom: 10px;
+  }
+
+  /* ── Drop zone ── */
+  .drop-zone {
+    border: 1.5px dashed var(--border-md); border-radius: var(--radius);
+    padding: 1.5rem 1rem; text-align: center; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .drop-zone:hover { background: var(--bg); }
+  .drop-zone.drag-over { border-color: var(--green); background: var(--green-bg); }
+  .drop-zone.has-file  { border-color: var(--green); }
+  .drop-icon { font-size: 28px; margin-bottom: 8px; }
+  .drop-zone p  { font-size: 13px; color: var(--muted); }
+  .drop-zone small { font-size: 11px; color: var(--hint); }
+  #fileInput { display: none; }
+
+  /* ── Form elements ── */
+  .field { margin-bottom: 12px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+  .field input, .field select {
+    width: 100%; padding: 7px 10px; font-size: 13px;
+    border: 0.5px solid var(--border-md); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--text);
+    outline: none; transition: border-color 0.15s;
+  }
+  .field input:focus, .field select:focus { border-color: var(--green); }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* ── Toggle ── */
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 0; border-bottom: 0.5px solid var(--border);
+  }
+  .toggle-row:last-child { border-bottom: none; }
+  .toggle-info p    { font-size: 13px; }
+  .toggle-info small { font-size: 11px; color: var(--hint); }
+  .toggle { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .tog-sl {
+    position: absolute; cursor: pointer; inset: 0;
+    background: var(--border-md); border-radius: 20px; transition: 0.2s;
+  }
+  .tog-sl::before {
+    content: ''; position: absolute;
+    width: 14px; height: 14px; left: 3px; bottom: 3px;
+    background: white; border-radius: 50%; transition: 0.2s;
+  }
+  .toggle input:checked + .tog-sl { background: var(--green); }
+  .toggle input:checked + .tog-sl::before { transform: translateX(16px); }
+
+  /* ── Metrics ── */
+  .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 1rem; }
+  .metric {
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: var(--radius); padding: 10px 12px;
+  }
+  .metric .val { font-size: 20px; font-weight: 600; }
+  .metric .lbl { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+  /* ── Command box ── */
+  .cmd-wrap {
+    background: #1e1e1c; border-radius: var(--radius);
+    padding: 12px 14px; display: flex; align-items: flex-start;
+    gap: 10px; margin-bottom: 1rem;
+  }
+  .cmd-wrap code { flex: 1; font-family: var(--mono); font-size: 12px; color: #a8e6cf; word-break: break-all; }
+  .cmd-wrap button {
+    background: none; border: 0.5px solid rgba(255,255,255,0.15);
+    border-radius: var(--radius-sm); color: rgba(255,255,255,0.5);
+    padding: 3px 8px; font-size: 11px; cursor: pointer; flex-shrink: 0; transition: color 0.15s;
+  }
+  .cmd-wrap button:hover { color: white; }
+
+  /* ── Run button ── */
+  .run-btn {
+    width: 100%; padding: 11px; font-size: 14px; font-weight: 600;
+    border-radius: var(--radius); cursor: pointer;
+    border: 1.5px solid var(--border-md); background: var(--surface);
+    color: var(--text); transition: background 0.15s, border-color 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .run-btn:hover { background: var(--bg); }
+  .run-btn.ready { border-color: var(--green); color: var(--green-dk); }
+  .run-btn.ready:hover { background: var(--green-bg); }
+  .run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── Results panel ── */
+  .results-panel { display: none; }
+  .results-panel.visible { display: block; }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 1rem; }
+  .sum-card {
+    border-radius: var(--radius); padding: 10px 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .sum-card.red    { background: var(--red-bg); }
+  .sum-card.amber  { background: var(--amber-bg); }
+  .sum-card.green  { background: var(--green-bg); }
+  .sum-card.blue   { background: var(--blue-bg); }
+  .sum-card .dot   { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .dot.red   { background: var(--red); }
+  .dot.amber { background: var(--amber); }
+  .dot.green { background: var(--green); }
+  .dot.blue  { background: var(--blue); }
+  .sum-card .num  { font-size: 22px; font-weight: 700; }
+  .sum-card .desc { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .sum-card.red   .num { color: var(--red); }
+  .sum-card.amber .num { color: var(--amber); }
+  .sum-card.green .num { color: var(--green-dk); }
+  .sum-card.blue  .num { color: var(--blue); }
+
+  /* ── Table ── */
+  .tbl-wrap { overflow-x: auto; border-radius: var(--radius); border: 0.5px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th {
+    background: var(--bg); padding: 8px 10px; text-align: left;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+    text-transform: uppercase; color: var(--hint);
+    border-bottom: 0.5px solid var(--border); white-space: nowrap;
+  }
+  tbody tr { border-bottom: 0.5px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--bg); }
+  tbody td { padding: 8px 10px; color: var(--text); white-space: nowrap; }
+  .pill {
+    display: inline-block; font-size: 10px; font-weight: 600;
+    padding: 2px 8px; border-radius: 20px;
+  }
+  .pill-red    { background: var(--red-bg);   color: var(--red); }
+  .pill-amber  { background: var(--amber-bg); color: var(--amber); }
+  .pill-green  { background: var(--green-bg); color: var(--green-dk); }
+  .pill-blue   { background: var(--blue-bg);  color: var(--blue); }
+  .pill-gray   { background: #f1efe8;         color: #5f5e5a; }
+  td.up   { color: var(--red);       font-weight: 600; }
+  td.down { color: var(--green-dk);  font-weight: 600; }
+  td.flat { color: var(--muted); }
+
+  /* ── Filters ── */
+  .filters {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .filter-btn {
+    padding: 5px 12px; font-size: 12px; border-radius: 20px;
+    border: 0.5px solid var(--border-md); background: var(--surface);
+    cursor: pointer; color: var(--muted); transition: all 0.15s;
+  }
+  .filter-btn:hover, .filter-btn.active { background: var(--text); color: white; border-color: var(--text); }
+  .filter-btn.urgent.active  { background: var(--red);   border-color: var(--red);   color: white; }
+  .filter-btn.medium.active  { background: var(--amber); border-color: var(--amber); color: white; }
+  .filter-btn.nochange.active{ background: var(--green); border-color: var(--green); color: white; }
+
+  /* ── Progress ── */
+  .progress-wrap { margin-top: 12px; display: none; }
+  .prog-bar-bg { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 8px; }
+  .prog-bar    { height: 100%; background: var(--green); border-radius: 2px; width: 0; transition: width 0.4s; }
+  .log-box {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    background: var(--bg); border-radius: var(--radius-sm);
+    padding: 10px 12px; max-height: 110px; overflow-y: auto;
+  }
+  .log-line { margin-bottom: 2px; }
+  .log-line.ok   { color: var(--green); }
+  .log-line.warn { color: var(--amber); }
+  .log-line.err  { color: var(--red); }
+
+  /* ── Pagination ── */
+  .pagination { display: flex; align-items: center; gap: 8px; margin-top: 12px; justify-content: flex-end; }
+  .page-btn {
+    padding: 4px 10px; font-size: 12px; border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border-md); background: var(--surface);
+    cursor: pointer; color: var(--text);
+  }
+  .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .page-info { font-size: 12px; color: var(--muted); }
+
+  /* ── Misc ── */
+  .empty { text-align: center; padding: 3rem; color: var(--hint); font-size: 13px; }
+  .search-box { width: 100%; padding: 7px 10px; font-size: 13px; border: 0.5px solid var(--border-md); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); margin-bottom: 10px; outline: none; }
+  .search-box:focus { border-color: var(--green); }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div>
+      <h1>⚙️ AI Үнийн Санал Болгох Агент</h1>
+      <p>Монголын жижиглэн худалдааны үнийн оновчлол · v2</p>
+    </div>
+    <span class="badge-engine" id="engineBadge">rule-based-v2</span>
+  </div>
+
+  <div class="layout">
+
+    <!-- LEFT: Config panel -->
+    <div class="left-col">
+
+      <!-- CSV Upload -->
+      <div class="card">
+        <div class="card-label">CSV Өгөгдөл</div>
+        <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+          <div class="drop-icon" id="dropIcon">📂</div>
+          <p id="dropText">CSV файл оруулах</p>
+          <small id="dropSub">Товшино уу эсвэл чирж тавина уу</small>
+        </div>
+        <input type="file" id="fileInput" accept=".csv">
+      </div>
+
+      <!-- Settings -->
+      <div class="card">
+        <div class="card-label">Тохиргоо</div>
+        <div class="field-row" style="margin-bottom:12px">
+          <div class="field">
+            <label>Шинжлэх тоо</label>
+            <input type="number" id="topN" placeholder="Бүгд" min="1">
+          </div>
+          <div class="field">
+            <label>Гаралтын файл</label>
+            <input type="text" id="outputPath" value="results.json">
+          </div>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <p>Gemini AI тайлбар</p>
+            <small>Яаралтай барааны монгол тайлбар</small>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="useGemini" onchange="onGeminiToggle()">
+            <span class="tog-sl"></span>
+          </label>
+        </div>
+        <div id="geminiSection" style="display:none; padding-top:10px">
+          <div class="field">
+            <label>Gemini API түлхүүр</label>
+            <input type="password" id="apiKey" placeholder="AIza...">
+          </div>
+          <div class="field">
+            <label>Gemini-гаар баяжуулах дээд тоо</label>
+            <input type="number" id="geminiTop" value="50" min="1">
+          </div>
+        </div>
+      </div>
+
+      <!-- Metrics -->
+      <div class="metrics">
+        <div class="metric">
+          <div class="val" id="mFile">—</div>
+          <div class="lbl">Файл</div>
+        </div>
+        <div class="metric">
+          <div class="val" id="mTop">Бүгд</div>
+          <div class="lbl">Бараа</div>
+        </div>
+        <div class="metric">
+          <div class="val" id="mEngine">Дүрэм</div>
+          <div class="lbl">Хөдөлгүүр</div>
+        </div>
+      </div>
+
+      <!-- Command -->
+      <div class="cmd-wrap">
+        <code id="cmdPreview">python agent.py --csv data.csv</code>
+        <button onclick="copyCmd()" id="copyBtn">Хуулах</button>
+      </div>
+
+      <!-- Run -->
+      <button class="run-btn" id="runBtn" onclick="runAgent()">
+        ▶ Ажиллуулах
+      </button>
+
+      <!-- Progress -->
+      <div class="progress-wrap" id="progressWrap">
+        <div class="prog-bar-bg"><div class="prog-bar" id="progBar"></div></div>
+        <div class="log-box" id="logBox"></div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT: Results panel -->
+    <div class="right-col">
+      <div id="emptyState" class="card" style="text-align:center; padding: 3rem 1rem;">
+        <div style="font-size:40px; margin-bottom:12px">📊</div>
+        <p style="font-size:14px; color:var(--muted)">CSV файл оруулаад агентийг ажиллуулна уу</p>
+        <small style="color:var(--hint)">Үр дүн энд харагдана</small>
+      </div>
+
+      <div class="results-panel" id="resultsPanel">
+
+        <!-- Summary -->
+        <div class="card">
+          <div class="card-label">Нэгтгэл</div>
+          <div class="summary-grid">
+            <div class="sum-card red">
+              <div class="dot red"></div>
+              <div><div class="num" id="sUrgent">0</div><div class="desc">Яаралтай үнэ өөрчлөх</div></div>
+            </div>
+            <div class="sum-card amber">
+              <div class="dot amber"></div>
+              <div><div class="num" id="sMedium">0</div><div class="desc">Дунд зэргийн өөрчлөлт</div></div>
+            </div>
+            <div class="sum-card green">
+              <div class="dot green"></div>
+              <div><div class="num" id="sNoChange">0</div><div class="desc">Өөрчлөхгүй</div></div>
+            </div>
+            <div class="sum-card blue">
+              <div class="dot blue"></div>
+              <div><div class="num" id="sTotal">0</div><div class="desc">Нийт шинжилсэн бараа</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="card">
+          <div class="card-label">Үнийн санал — дэлгэрэнгүй</div>
+
+          <input class="search-box" type="text" id="searchBox" placeholder="Бараа ID хайх..." oninput="applyFilters()">
+
+          <div class="filters">
+            <button class="filter-btn active" data-filter="all"    onclick="setFilter('all',this)">Бүгд</button>
+            <button class="filter-btn urgent"   data-filter="urgent"  onclick="setFilter('urgent',this)">🔴 Яаралтай</button>
+            <button class="filter-btn medium"   data-filter="medium"  onclick="setFilter('medium',this)">🟡 Дунд</button>
+            <button class="filter-btn nochange" data-filter="low"     onclick="setFilter('low',this)">🟢 Хойшлуулж болно</button>
+          </div>
+
+          <div class="tbl-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Бараа ID</th>
+                  <th>Одоогийн үнэ</th>
+                  <th>Санал үнэ</th>
+                  <th>Өөрчлөлт</th>
+                  <th>Үйлдэл</th>
+                  <th>Яаралтай байдал</th>
+                  <th>Ашиг %</th>
+                  <th>Эрэлт</th>
+                  <th>Шалтгаан</th>
+                </tr>
+              </thead>
+              <tbody id="tableBody"></tbody>
+            </table>
+          </div>
+
+          <div class="pagination">
+            <button class="page-btn" id="prevBtn" onclick="changePage(-1)" disabled>← Өмнөх</button>
+            <span class="page-info" id="pageInfo">1 / 1</span>
+            <button class="page-btn" id="nextBtn" onclick="changePage(1)">Дараах →</button>
+          </div>
+        </div>
+
+        <!-- Download -->
+        <button class="run-btn" id="downloadBtn" onclick="downloadResults()" style="margin-top:0">
+          ⬇ results.json татаж авах
+        </button>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──
+let csvFile    = null;
+let allResults = [];
+let filtered   = [];
+let currentFilter = 'all';
+let currentPage   = 1;
+const PAGE_SIZE   = 50;
+let rawOutput  = null;
+
+// ── File handling ──
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) setFile(f);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) setFile(e.target.files[0]); });
+
+function setFile(f) {
+  csvFile = f;
+  dropZone.classList.add('has-file');
+  document.getElementById('dropIcon').textContent = '✅';
+  document.getElementById('dropText').textContent = f.name;
+  document.getElementById('dropSub').textContent  = (f.size / 1024).toFixed(1) + ' KB';
+  document.getElementById('mFile').textContent = f.name.replace('.csv','').slice(0,8);
+  document.getElementById('runBtn').classList.add('ready');
+  updateCmd();
+}
+
+// ── Config ──
+function onGeminiToggle() {
+  const on = document.getElementById('useGemini').checked;
+  document.getElementById('geminiSection').style.display = on ? 'block' : 'none';
+  document.getElementById('mEngine').textContent = on ? 'Gemini' : 'Дүрэм';
+  document.getElementById('engineBadge').textContent = on ? 'gemini + rule' : 'rule-based-v2';
+  updateCmd();
+}
+
+document.getElementById('topN').addEventListener('input', () => {
+  const v = document.getElementById('topN').value;
+  document.getElementById('mTop').textContent = v || 'Бүгд';
+  updateCmd();
+});
+document.getElementById('outputPath').addEventListener('input', updateCmd);
+document.getElementById('geminiTop').addEventListener('input', updateCmd);
+
+function updateCmd() {
+  const csv = csvFile ? csvFile.name : 'data.csv';
+  const out = document.getElementById('outputPath').value || 'results.json';
+  const top = document.getElementById('topN').value;
+  const gemini = document.getElementById('useGemini').checked;
+  const gt = document.getElementById('geminiTop').value;
+  let cmd = `python agent.py --csv ${csv}`;
+  if (top)  cmd += ` --top ${top}`;
+  if (out !== 'results.json') cmd += ` --output ${out}`;
+  if (gemini) cmd += ` --api-key $GEMINI_API_KEY --gemini-top ${gt}`;
+  document.getElementById('cmdPreview').textContent = cmd;
+}
+
+function copyCmd() {
+  navigator.clipboard.writeText(document.getElementById('cmdPreview').textContent)
+    .then(() => {
+      document.getElementById('copyBtn').textContent = '✓ Хуулсан';
+      setTimeout(() => document.getElementById('copyBtn').textContent = 'Хуулах', 1500);
+    });
+}
+
+// ── Run agent (reads CSV, applies rule engine in browser) ──
+function runAgent() {
+  if (!csvFile) { alert('CSV файл оруулна уу'); return; }
+
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Боловсруулж байна...';
+
+  const pw = document.getElementById('progressWrap');
+  pw.style.display = 'block';
+  const pb = document.getElementById('progBar');
+  const lb = document.getElementById('logBox');
+  lb.innerHTML = '';
+
+  function log(msg, cls='') {
+    const p = document.createElement('p');
+    p.className = 'log-line' + (cls ? ' '+cls : '');
+    p.textContent = msg;
+    lb.appendChild(p);
+    lb.scrollTop = lb.scrollHeight;
+  }
+
+  log('📂 CSV уншиж байна: ' + csvFile.name);
+  pb.style.width = '10%';
+
+  const reader = new FileReader();
+  reader.onerror = function() { log('❌ Файл унших алдаа', 'err'); btn.disabled = false; btn.textContent = '▶ Ажиллуулах'; };
+  reader.onload = function(e) {
+    const text = e.target.result;
+    pb.style.width = '30%';
+    log('✅ Файл ачааллаа');
+
+    try {
+      const lines = text.trim().split('\n');
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
+      log(`📊 Нийт ${(lines.length-1).toLocaleString()} мөр олдлоо`);
+      pb.style.width = '40%';
+
+      const CHUNK = 3000;
+      const map = {};
+      const now = new Date();
+      let i = 1;
+
+      function processChunk() {
+        const end = Math.min(i + CHUNK, lines.length);
+        for (; i < end; i++) {
+          const vals = splitCSVLine(lines[i]);
+          if (vals.length < headers.length) continue;
+          const row = {};
+          headers.forEach((h, idx) => { row[h] = vals[idx] ? vals[idx].trim().replace(/^"|"$/g,'') : ''; });
+          const price = parseFloat(row['Price']);
+          const base  = parseFloat(row['BasePrice']);
+          const profit= parseFloat(row['Profit']);
+          const qty   = parseFloat(row['SalesQty']);
+          const amt   = parseFloat(row['Amount']);
+          if (isNaN(price)||price<=0||isNaN(base)||isNaN(profit)||isNaN(qty)||isNaN(amt)) continue;
+          const date = new Date(row['SaleDate']);
+          const id = row['ItemPkId'];
+          if (!map[id]) {
+            map[id] = { ItemPkId:id, CategoryPkId:row['CategoryPkId'], GroupPkId:row['GroupPkId'], BrandPkId:row['BrandPkId'],
+              total_qty:0, total_revenue:0, total_profit:0,
+              sum_price:0, sum_base:0, count:0,
+              min_price:price, max_price:price,
+              months:new Set(), first:date, last:date };
+          }
+          const m = map[id];
+          m.total_qty += qty; m.total_revenue += amt; m.total_profit += profit;
+          m.sum_price += price; m.sum_base += base; m.count++;
+          if (price < m.min_price) m.min_price = price;
+          if (price > m.max_price) m.max_price = price;
+          m.months.add(date.getFullYear()+'-'+date.getMonth());
+          if (date < m.first) m.first = date;
+          if (date > m.last)  m.last  = date;
+        }
+
+        const pct = 40 + Math.round((i / lines.length) * 40);
+        pb.style.width = pct + '%';
+
+        if (i < lines.length) {
+          log(`⏳ ${i.toLocaleString()} / ${(lines.length-1).toLocaleString()} мөр...`);
+          setTimeout(processChunk, 0);
+        } else {
+          pb.style.width = '82%';
+          log('🔧 Нэгтгэж байна...');
+          setTimeout(() => {
+            const rawItems = Object.values(map);
+            const items = rawItems.map(m => {
+              const avg_price  = m.sum_price / m.count;
+              const base_price = m.sum_base  / m.count;
+              const months     = Math.max(m.months.size, 1);
+              const cp         = avg_price - (m.total_profit/Math.max(m.total_qty,1));
+              const cost_price = Math.max(cp, avg_price*0.4);
+              const margin_pct = m.total_revenue>0 ? (m.total_profit/m.total_revenue*100) : 0;
+              const avg_mq     = m.total_qty/months;
+              const disc       = base_price>0 ? Math.max(0,(base_price-avg_price)/base_price*100) : 0;
+              const days_last  = (now-m.last)/86400000;
+              return { ItemPkId:m.ItemPkId, CategoryPkId:m.CategoryPkId, GroupPkId:m.GroupPkId, BrandPkId:m.BrandPkId,
+                total_qty:m.total_qty, total_revenue:m.total_revenue, total_profit:m.total_profit,
+                avg_price, base_price, months_active:months, cost_price,
+                margin_pct: isFinite(margin_pct)?margin_pct:0,
+                avg_monthly_qty:avg_mq, discount_pct:disc, days_since_last:days_last,
+                demand_level:demandLabel(avg_mq), margin_label:marginLabel(margin_pct) };
+            });
+            pb.style.width = '88%';
+            log(`🎯 ${items.length.toLocaleString()} бараа олдлоо`);
+            setTimeout(() => {
+              items.sort((a,b)=>{
+                const pa=(a.margin_pct<0?4:0)+(a.margin_pct<20?2:0)+(a.demand_level==='Бага'?1:0);
+                const pb2=(b.margin_pct<0?4:0)+(b.margin_pct<20?2:0)+(b.demand_level==='Бага'?1:0);
+                return pb2-pa;
+              });
+              const top = parseInt(document.getElementById('topN').value)||null;
+              const toProcess = top ? items.slice(0,top) : items;
+              pb.style.width = '93%';
+              log(`⚙️ Үнийн дүрэм боловсруулж байна (${toProcess.length.toLocaleString()} бараа)...`);
+              setTimeout(() => {
+                const results = toProcess.map(row => smartPricingRule(row));
+                const summary = buildSummary(results);
+                rawOutput = { generated_at:new Date().toISOString(), engine:'rule-based-v2', total_items_analyzed:results.length, summary, results };
+                allResults = results;
+                pb.style.width = '100%';
+                log(`✅ Нийт ${results.length.toLocaleString()} бараа шинжлэгдлээ`, 'ok');
+                log(`🔴 Яаралтай: ${summary.urgent}  🟡 Дунд: ${summary.medium}  🟢 Болно: ${summary.low}`, 'ok');
+                setTimeout(() => { showResults(results, summary); btn.disabled=false; btn.textContent='▶ Дахин ажиллуулах'; }, 100);
+              }, 0);
+            }, 0);
+          }, 0);
+        }
+      }
+      setTimeout(processChunk, 0);
+    } catch(err) {
+      log('❌ Алдаа: ' + err.message, 'err');
+      btn.disabled = false; btn.textContent = '▶ Ажиллуулах';
+    }
+  };
+  reader.readAsText(csvFile, 'UTF-8');
+}
+
+
+function splitCSVLine(line) {
+  const result = []; let cur = ''; let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { result.push(cur); cur = ''; }
+    else { cur += c; }
+  }
+  result.push(cur);
+  return result;
+}
+
+// ── Rule engine (mirrors Python logic) ──
+function smartPricingRule(row) {
+  const cur_price  = row.avg_price;
+  const base_price = row.base_price;
+  const cost_price = row.cost_price;
+  const margin     = row.margin_pct;
+  const demand     = row.demand_level;
+  const monthly_q  = row.avg_monthly_qty;
+  const discount   = row.discount_pct;
+  const days_last  = row.days_since_last;
+
+  let suggested = cur_price, reasons = [], action = 'Өөрчлөхгүй', urgency = 'Хойшлуулж болно';
+
+  if (margin < 0) {
+    const min_viable = cost_price * 1.15;
+    suggested = Math.min(Math.max(min_viable, cur_price * 1.20), base_price);
+    action = 'Үнэ нэмэх'; urgency = 'Яаралтай';
+    reasons.push(`Алдагдалтай зарагдаж байна (${margin.toFixed(1)}%)`);
+    reasons.push(`Хамгийн бага үнэ: ${Math.round(min_viable).toLocaleString()}₮`);
+  } else if (margin < 20 && demand === 'Өндөр') {
+    suggested = Math.min(cur_price * 1.12, base_price);
+    action = 'Үнэ нэмэх'; urgency = 'Яаралтай';
+    reasons.push(`Эрэлт өндөр (${Math.round(monthly_q)} ш/сар) ашиг бага (${margin.toFixed(1)}%)`);
+  } else if (margin >= 40 && demand === 'Өндөр' && monthly_q >= 50) {
+    suggested = Math.min(cur_price * 1.05, base_price * 1.02);
+    action = 'Үнэ нэмэх'; urgency = 'Дунд';
+    reasons.push(`Эрэлт маш өндөр (${Math.round(monthly_q)} ш/сар), ашиг сайн (${margin.toFixed(1)}%)`);
+  } else if (demand === 'Бага' && discount > 15) {
+    suggested = cur_price * 0.90;
+    action = 'Үнэ бууруулах'; urgency = 'Дунд';
+    reasons.push(`Эрэлт бага, ${discount.toFixed(1)}% хөнгөлөлттэй ч зарагдахгүй`);
+  } else if (demand === 'Бага' && margin > 30 && discount < 5) {
+    suggested = cur_price * 0.93;
+    action = 'Үнэ бууруулах'; urgency = 'Дунд';
+    reasons.push(`Эрэлт бага (${monthly_q.toFixed(1)} ш/сар), ашиг хангалттай (${margin.toFixed(1)}%)`);
+  } else if (days_last > 60 && margin > 20) {
+    suggested = cur_price * 0.88;
+    action = 'Үнэ бууруулах'; urgency = 'Дунд';
+    reasons.push(`${Math.round(days_last)} хоногийн өмнө сүүлд зарагдсан`);
+  } else if (cur_price < base_price * 0.95 && margin > 45 && demand !== 'Бага') {
+    suggested = base_price * 0.98;
+    action = 'Үнэ нэмэх'; urgency = 'Дунд';
+    reasons.push(`Суурь үнэ ${Math.round(base_price).toLocaleString()}₮, ${discount.toFixed(1)}% хямдаар зарагдаж байна`);
+  } else {
+    reasons.push(`Одоогийн үнэ зохистой: ашиг ${margin.toFixed(1)}%, эрэлт ${demand.toLowerCase()}`);
+  }
+
+  if (cost_price > 0 && suggested < cost_price * 1.05) {
+    suggested = cost_price * 1.10;
+    reasons.push(`⚠️ Өртөгийн доод хязгаар: ${Math.round(cost_price).toLocaleString()}₮`);
+  }
+
+  suggested = Math.round(suggested / 10) * 10;
+  const change_amt = suggested - cur_price;
+  const change_pct = cur_price > 0 ? (change_amt / cur_price * 100) : 0;
+
+  if (Math.abs(change_pct) < 0.5) {
+    action = 'Өөрчлөхгүй'; urgency = 'Хойшлуулж болно';
+    suggested = Math.round(cur_price / 10) * 10;
+  }
+
+  return {
+    item_id:         row.ItemPkId,
+    category:        row.CategoryPkId,
+    cost_price:      Math.round(cost_price),
+    current_price:   Math.round(cur_price),
+    base_price:      Math.round(base_price),
+    suggested_price: Math.round(suggested),
+    change_pct:      (change_pct >= 0 ? '+' : '') + change_pct.toFixed(1) + '%',
+    change_amount:   Math.round(change_amt),
+    action,
+    urgency,
+    margin_pct:      parseFloat(margin.toFixed(1)),
+    margin_label:    row.margin_label,
+    demand_level:    demand,
+    avg_monthly_qty: parseFloat(monthly_q.toFixed(1)),
+    total_qty:       Math.round(row.total_qty),
+    months_active:   row.months_active,
+    reason:          reasons.join(' | '),
+    engine:          'rule-based-v2'
+  };
+}
+
+function buildSummary(results) {
+  return {
+    price_increase: results.filter(r => r.action.includes('нэмэх')).length,
+    price_decrease: results.filter(r => r.action.includes('бууруулах')).length,
+    no_change:      results.filter(r => r.action === 'Өөрчлөхгүй').length,
+    urgent:         results.filter(r => r.urgency === 'Яаралтай').length,
+    medium:         results.filter(r => r.urgency === 'Дунд').length,
+    low:            results.filter(r => r.urgency === 'Хойшлуулж болно').length,
+  };
+}
+
+// ── Display ──
+function showResults(results, summary) {
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('resultsPanel').classList.add('visible');
+  document.getElementById('sUrgent').textContent  = summary.urgent.toLocaleString();
+  document.getElementById('sMedium').textContent  = summary.medium.toLocaleString();
+  document.getElementById('sNoChange').textContent= summary.no_change.toLocaleString();
+  document.getElementById('sTotal').textContent   = results.length.toLocaleString();
+  currentFilter = 'all'; currentPage = 1;
+  applyFilters();
+}
+
+function setFilter(f, btn) {
+  currentFilter = f; currentPage = 1;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilters();
+}
+
+function applyFilters() {
+  const search = (document.getElementById('searchBox').value || '').toLowerCase();
+  filtered = allResults.filter(r => {
+    const matchFilter =
+      currentFilter === 'all' ? true :
+      currentFilter === 'urgent' ? r.urgency === 'Яаралтай' :
+      currentFilter === 'medium' ? r.urgency === 'Дунд' :
+      currentFilter === 'low'    ? r.urgency === 'Хойшлуулж болно' : true;
+    const matchSearch = !search || String(r.item_id).toLowerCase().includes(search);
+    return matchFilter && matchSearch;
+  });
+  renderPage();
+}
+
+function renderPage() {
+  const total = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  currentPage = Math.min(currentPage, total);
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page  = filtered.slice(start, start + PAGE_SIZE);
+
+  document.getElementById('pageInfo').textContent = `${currentPage} / ${total}`;
+  document.getElementById('prevBtn').disabled = currentPage <= 1;
+  document.getElementById('nextBtn').disabled = currentPage >= total;
+
+  const tbody = document.getElementById('tableBody');
+  if (page.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty">Хайлтад тохирох бараа олдсонгүй</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = page.map(r => {
+    const urgPill = r.urgency === 'Яаралтай' ? 'pill-red' : r.urgency === 'Дунд' ? 'pill-amber' : 'pill-green';
+    const urgLabel= r.urgency === 'Яаралтай' ? '🔴 Яаралтай' : r.urgency === 'Дунд' ? '🟡 Дунд' : '🟢 Болно';
+    const actPill = r.action.includes('нэмэх') ? 'pill-red' : r.action.includes('бууруулах') ? 'pill-blue' : 'pill-gray';
+    const chgCls  = r.change_amount > 0 ? 'up' : r.change_amount < 0 ? 'down' : 'flat';
+    const demPill = r.demand_level === 'Өндөр' ? 'pill-green' : r.demand_level === 'Дунд' ? 'pill-amber' : 'pill-gray';
+    const marginColor = r.margin_pct < 0 ? 'color:var(--red)' : r.margin_pct < 20 ? 'color:var(--amber)' : 'color:var(--green-dk)';
+    const reason = r.reason.length > 55 ? r.reason.slice(0,55)+'…' : r.reason;
+    return `<tr>
+      <td><strong>${r.item_id}</strong></td>
+      <td>${r.current_price.toLocaleString()}₮</td>
+      <td><strong>${r.suggested_price.toLocaleString()}₮</strong></td>
+      <td class="${chgCls}">${r.change_pct} (${r.change_amount >= 0 ? '+' : ''}${r.change_amount.toLocaleString()}₮)</td>
+      <td><span class="pill ${actPill}">${r.action}</span></td>
+      <td><span class="pill ${urgPill}">${urgLabel}</span></td>
+      <td style="${marginColor}">${r.margin_pct}%</td>
+      <td><span class="pill ${demPill}">${r.demand_level}</span></td>
+      <td title="${r.reason}" style="color:var(--muted)">${reason}</td>
+    </tr>`;
+  }).join('');
+}
+
+function changePage(dir) { currentPage += dir; renderPage(); }
+
+// ── Download ──
+function downloadResults() {
+  if (!rawOutput) return;
+  const out = document.getElementById('outputPath').value || 'results.json';
+  const blob = new Blob([JSON.stringify(rawOutput, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = out; a.click();
+}
+</script>
+</body>
+</html>
