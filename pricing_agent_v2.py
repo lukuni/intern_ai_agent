@@ -1,404 +1,498 @@
 """
-AI Үнийн Санал Болгох Агент v2
-- Бүх барааг шинжилнэ
-- Борлуулалт + эрэлт + ашиг + өртөг бүгдийг харгалзана
-- Ахлагчийн шаардлагыг бүрэн хэрэгжүүлнэ
+AI Үнийн Санал Болгох Агент
+Монголын жижиглэн худалдааны үнийг оновчлогч систем.
+
+Бүтээгдэхүүн тус бүрийн борлуулалтын түүх, эрэлтийн хэв маяг,
+ашиг болон өртгийг шинжлэн оновчтой үнийг санал болгоно —
+Gemini AI тайлбартай эсвэл тайлбаргүй ажиллах боломжтой.
+
+Хэрэглэх:
+    python pricing_agent.py --csv sales.csv
+    python pricing_agent.py --csv sales.csv --api-key ТАНЫ_ТҮЛХҮҮР --top 100
 """
 
-import pandas as pd
 import json
-import argparse
-import sys
 import os
+import sys
+import argparse
 from datetime import datetime
+
+import pandas as pd
 
 try:
     from google import genai
     from google.genai import types
-    GEMINI_AVAILABLE = True
+    GEMINI_БОЛОМЖТОЙ = True
 except ImportError:
-    GEMINI_AVAILABLE = False
+    GEMINI_БОЛОМЖТОЙ = False
 
-# ════════════════════════════════════════════════════════
-# 1. ӨГӨГДӨЛ ЦЭВЭРЛЭГЧ + ШИНЖИЛГЭЭ
-# ════════════════════════════════════════════════════════
 
-def load_and_analyze(csv_path: str) -> pd.DataFrame:
-    print(f"\n📂 CSV уншиж байна: {csv_path}")
-    df = pd.read_csv(csv_path)
+# ─────────────────────────────────────────────────────────────────────────────
+# Өгөгдөл Ачаалах ба Шинжлэх
+# ─────────────────────────────────────────────────────────────────────────────
+
+def ачаалах_шинжлэх(csv_зам: str) -> pd.DataFrame:
+    """
+    Борлуулалтын CSV файлыг ачаалж, буруу мөрүүдийг цэвэрлэн,
+    бүтээгдэхүүн тус бүрийн нэгтгэсэн үзүүлэлтүүдийг тооцоолно.
+
+    Буцаах утга: бүтээгдэхүүн тус бүрт нэг мөртэй DataFrame —
+    сарын дундаж тоо, ашгийн хувь, өртөг, эрэлтийн түвшин зэрэг үзүүлэлтүүдтэй.
+    """
+    print(f"\n📂 CSV уншиж байна: {csv_зам}")
+    df = pd.read_csv(csv_зам)
     print(f"   ✅ {len(df):,} мөр ачааллаа")
 
-    # Цэвэрлэх
-    before = len(df)
-    df = df[df['Price'] > 0].copy()
-    df = df.dropna(subset=['Price','BasePrice','Profit','SalesQty','Amount'])
-    print(f"   🧹 {before - len(df):,} мөр цэвэрлэгдсэн → {len(df):,} мөр үлдсэн")
+    # Үнэ тэг эсвэл хоосон байгаа мөрүүдийг хасах
+    анхны_тоо = len(df)
+    df = df[df["Price"] > 0].copy()
+    df = df.dropna(subset=["Price", "BasePrice", "Profit", "SalesQty", "Amount"])
+    хасагдсан = анхны_тоо - len(df)
+    print(f"   🧹 {хасагдсан:,} буруу мөр хасагдсан → {len(df):,} мөр үлдсэн")
 
-    # Огноо
-    df['SaleDate'] = pd.to_datetime(df['SaleDate'])
-    df['YearMonth'] = df['SaleDate'].dt.to_period('M')
+    # Огноог задлах ба жил-сараар бүлэглэх
+    df["SaleDate"] = pd.to_datetime(df["SaleDate"])
+    df["ЖилСар"] = df["SaleDate"].dt.to_period("M")
 
-    # Бараа тус бүрээр нэгтгэх
-    print("\n📊 Бараа тус бүрээр нэгтгэж байна...")
-    agg = df.groupby(['ItemPkId','CategoryPkId','GroupPkId','BrandPkId']).agg(
-        total_qty       = ('SalesQty',  'sum'),
-        total_revenue   = ('Amount',    'sum'),
-        total_profit    = ('Profit',    'sum'),
-        avg_price       = ('Price',     'mean'),
-        base_price      = ('BasePrice', 'mean'),
-        min_price       = ('Price',     'min'),
-        max_price       = ('Price',     'max'),
-        months_active   = ('YearMonth', lambda x: x.nunique()),
-        last_sale_date  = ('SaleDate',  'max'),
-        first_sale_date = ('SaleDate',  'min'),
+    # Бүтээгдэхүүн тус бүрээр борлуулалтын өгөгдлийг нэгтгэх
+    print("\n📊 Бүтээгдэхүүн тус бүрийн үзүүлэлт тооцоолж байна...")
+    нэгтгэсэн = df.groupby(
+        ["ItemPkId", "CategoryPkId", "GroupPkId", "BrandPkId"]
+    ).agg(
+        нийт_тоо          = ("SalesQty",  "sum"),
+        нийт_орлого       = ("Amount",    "sum"),
+        нийт_ашиг         = ("Profit",    "sum"),
+        дундаж_үнэ        = ("Price",     "mean"),
+        суурь_үнэ         = ("BasePrice", "mean"),
+        хамгийн_бага_үнэ  = ("Price",     "min"),
+        хамгийн_өндөр_үнэ = ("Price",     "max"),
+        идэвхтэй_сар      = ("ЖилСар",   lambda x: x.nunique()),
+        сүүлд_зарсан      = ("SaleDate",  "max"),
+        эхлэж_зарсан      = ("SaleDate",  "min"),
     ).reset_index()
 
-    # Тооцоолол
-    agg['margin_pct']       = (agg['total_profit'] / agg['total_revenue'] * 100).round(2)
-    agg['avg_monthly_qty']  = (agg['total_qty'] / agg['months_active']).round(1)
-    agg['cost_price']       = (agg['avg_price'] - (agg['total_profit'] / agg['total_qty'])).round(0)
-    agg['discount_pct']     = ((agg['base_price'] - agg['avg_price']) / agg['base_price'] * 100).clip(lower=0).round(2)
-    agg['revenue_per_month']= (agg['total_revenue'] / agg['months_active']).round(0)
-    agg['days_since_last']  = (pd.Timestamp.now() - agg['last_sale_date']).dt.days
+    # Гаргаж авсан үзүүлэлтүүд
+    нэгтгэсэн["ашгийн_хувь"]      = (нэгтгэсэн["нийт_ашиг"] / нэгтгэсэн["нийт_орлого"] * 100).round(2)
+    нэгтгэсэн["сарын_дундаж_тоо"] = (нэгтгэсэн["нийт_тоо"] / нэгтгэсэн["идэвхтэй_сар"]).round(1)
+    нэгтгэсэн["өртөг"]            = (нэгтгэсэн["дундаж_үнэ"] - (нэгтгэсэн["нийт_ашиг"] / нэгтгэсэн["нийт_тоо"])).round(0)
+    нэгтгэсэн["хөнгөлөлтийн_хувь"] = ((нэгтгэсэн["суурь_үнэ"] - нэгтгэсэн["дундаж_үнэ"]) / нэгтгэсэн["суурь_үнэ"] * 100).clip(lower=0).round(2)
+    нэгтгэсэн["сарын_орлого"]     = (нэгтгэсэн["нийт_орлого"] / нэгтгэсэн["идэвхтэй_сар"]).round(0)
+    нэгтгэсэн["сүүлд_зарснаас_хоног"] = (pd.Timestamp.now() - нэгтгэсэн["сүүлд_зарсан"]).dt.days
 
-    # Эрэлтийн ангилал — таны CSV-н бодит тархалт дээр үндэслэн
-    q25 = agg['avg_monthly_qty'].quantile(0.25)  # 2.0
-    q75 = agg['avg_monthly_qty'].quantile(0.75)  # 24.5
-    def demand_label(q):
-        if q >= q75:   return 'Өндөр'
-        elif q >= q25: return 'Дунд'
-        else:          return 'Бага'
-    agg['demand_level'] = agg['avg_monthly_qty'].apply(demand_label)
+    # Энэ датасетийн бодит тархалт дээр үндэслэн эрэлтийн ангилал
+    доод_босго  = нэгтгэсэн["сарын_дундаж_тоо"].quantile(0.25)   # доод 25%
+    өндөр_босго = нэгтгэсэн["сарын_дундаж_тоо"].quantile(0.75)   # дээд 25%
 
-    # Ашгийн ангилал
-    def margin_label(m):
-        if m < 0:    return 'Алдагдалтай'
-        elif m < 20: return 'Бага ашиг'
-        elif m < 40: return 'Дунд ашиг'
-        else:        return 'Сайн ашиг'
-    agg['margin_label'] = agg['margin_pct'].apply(margin_label)
+    def эрэлт_ангилах(сарын_тоо: float) -> str:
+        if сарын_тоо >= өндөр_босго:
+            return "Өндөр"
+        elif сарын_тоо >= доод_босго:
+            return "Дунд"
+        else:
+            return "Бага"
 
-    # Inf/NaN цэвэрлэх
-    agg['margin_pct'] = agg['margin_pct'].replace([float('inf'), float('-inf')], 0).fillna(0)
-    agg['cost_price'] = agg['cost_price'].replace([float('inf'), float('-inf')], 0).fillna(0)
+    def ашиг_ангилах(ашиг: float) -> str:
+        if ашиг < 0:
+            return "Алдагдалтай"
+        elif ашиг < 20:
+            return "Бага ашиг"
+        elif ашиг < 40:
+            return "Дунд ашиг"
+        else:
+            return "Сайн ашиг"
 
-    print(f"   ✅ {len(agg):,} бараа бэлэн боллоо")
+    нэгтгэсэн["эрэлтийн_түвшин"] = нэгтгэсэн["сарын_дундаж_тоо"].apply(эрэлт_ангилах)
+    нэгтгэсэн["ашгийн_ангилал"]  = нэгтгэсэн["ашгийн_хувь"].apply(ашиг_ангилах)
+
+    # Тооцооллын явцад үүсэж болох хязгааргүй болон хоосон утгуудыг цэвэрлэх
+    нэгтгэсэн["ашгийн_хувь"] = нэгтгэсэн["ашгийн_хувь"].replace([float("inf"), float("-inf")], 0).fillna(0)
+    нэгтгэсэн["өртөг"]       = нэгтгэсэн["өртөг"].replace([float("inf"), float("-inf")], 0).fillna(0)
+
+    # Хураангуй тайлан
+    print(f"   ✅ {len(нэгтгэсэн):,} бүтээгдэхүүн бэлэн боллоо")
     print(f"\n   📈 Ашгийн тархалт:")
-    print(f"      🔴 Алдагдалтай : {(agg['margin_pct'] < 0).sum():,} бараа")
-    print(f"      🟡 Бага ашиг   : {((agg['margin_pct'] >= 0) & (agg['margin_pct'] < 20)).sum():,} бараа")
-    print(f"      🟢 Сайн ашиг   : {(agg['margin_pct'] >= 20).sum():,} бараа")
+    print(f"      🔴 Алдагдалтай  : {(нэгтгэсэн['ашгийн_хувь'] < 0).sum():,}")
+    print(f"      🟡 Бага ашиг    : {((нэгтгэсэн['ашгийн_хувь'] >= 0) & (нэгтгэсэн['ашгийн_хувь'] < 20)).sum():,}")
+    print(f"      🟢 Сайн ашиг    : {(нэгтгэсэн['ашгийн_хувь'] >= 20).sum():,}")
     print(f"\n   📊 Эрэлтийн тархалт:")
-    print(f"      Өндөр эрэлт : {(agg['demand_level'] == 'Өндөр').sum():,} бараа")
-    print(f"      Дунд эрэлт  : {(agg['demand_level'] == 'Дунд').sum():,} бараа")
-    print(f"      Бага эрэлт  : {(agg['demand_level'] == 'Бага').sum():,} бараа")
+    print(f"      Өндөр : {(нэгтгэсэн['эрэлтийн_түвшин'] == 'Өндөр').sum():,}")
+    print(f"      Дунд  : {(нэгтгэсэн['эрэлтийн_түвшин'] == 'Дунд').sum():,}")
+    print(f"      Бага  : {(нэгтгэсэн['эрэлтийн_түвшин'] == 'Бага').sum():,}")
 
-    return agg
+    return нэгтгэсэн
 
 
-# ════════════════════════════════════════════════════════
-# 2. УХААЛАГ ҮНИЙН ЛОГИК
-# ════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
+# Үнийн Логик
+# ─────────────────────────────────────────────────────────────────────────────
 
-def smart_pricing_rule(row) -> dict:
+def үнэ_санал_болгох(мөр: pd.Series) -> dict:
     """
-    Ахлагчийн шаардлага дээр үндэслэсэн үнийн логик:
-    борлуулалт + эрэлт + өртөг + ашиг → оновчтой үнэ
+    Нэг бүтээгдэхүүнд бизнесийн дүрмүүдийг хэрэглэн шинэ үнэ санал болгоно.
+
+    Дүрмүүд дөрвөн дохиог харгалзана: ашигт ажиллагаа, эрэлт,
+    өртгийн доод хязгаар, сүүлд зарагдсанаас хэдэн хоног өнгөрсөн.
+
+    Буцаах утга: санал болгох үнэ, шалтгаан, яаралтай байдлыг агуулсан dict.
     """
-    item_id    = row['ItemPkId']
-    cur_price  = row['avg_price']
-    base_price = row['base_price']
-    cost_price = max(row['cost_price'], cur_price * 0.4)  # өртөг хамгийн багадаа 40%
-    margin     = row['margin_pct']
-    demand     = row['demand_level']
-    monthly_q  = row['avg_monthly_qty']
-    discount   = row['discount_pct']
-    days_last  = row['days_since_last']
+    одоогийн_үнэ  = мөр["дундаж_үнэ"]
+    суурь_үнэ     = мөр["суурь_үнэ"]
+    ашиг          = мөр["ашгийн_хувь"]
+    эрэлт         = мөр["эрэлтийн_түвшин"]
+    сарын_тоо     = мөр["сарын_дундаж_тоо"]
+    хөнгөлөлт    = мөр["хөнгөлөлтийн_хувь"]
+    идэвхгүй_хоног = мөр["сүүлд_зарснаас_хоног"]
 
-    suggested  = cur_price
-    reasons    = []
-    action     = 'Өөрчлөхгүй'
-    urgency    = 'Хойшлуулж болно'
+    # Өртгийн доод хязгаар: одоогийн үнийн 40%-иас доош зарахгүй
+    өртөг = max(мөр["өртөг"], одоогийн_үнэ * 0.40)
 
-    # ── ТОХИОЛДОЛ 1: Алдагдалтай ──────────────────────────
-    if margin < 0:
-        # Өртөгөөс дээш 15% ашигтай болтол нэмэх
-        min_viable = cost_price * 1.15
-        suggested  = max(min_viable, cur_price * 1.20)
-        suggested  = min(suggested, base_price)  # суурь үнээс хэтрэхгүй
-        action     = 'Үнэ нэмэх'
-        urgency    = 'Яаралтай'
-        reasons.append(f"Алдагдалтай зарагдаж байна ({margin:.1f}%)")
-        reasons.append(f"Өртөгийн тооцоогоор хамгийн бага үнэ: {min_viable:,.0f}₮")
+    санал    = одоогийн_үнэ
+    шалтгаан = []
+    үйлдэл   = "Өөрчлөхгүй"
+    яаралтай = "Бага зэрэг"
 
-    # ── ТОХИОЛДОЛ 2: Бага ашиг + Өндөр эрэлт ─────────────
-    elif margin < 20 and demand == 'Өндөр':
-        suggested = cur_price * 1.12
-        suggested = min(suggested, base_price)
-        action    = 'Үнэ нэмэх'
-        urgency   = 'Яаралтай'
-        reasons.append(f"Эрэлт өндөр ({monthly_q:.0f} ш/сар) боловч ашиг бага ({margin:.1f}%)")
-        reasons.append("Өндөр эрэлтийг ашиглан ашгийг нэмэгдүүлэх боломжтой")
+    # ── Дүрэм 1: Алдагдалтай бүтээгдэхүүн ───────────────────────────────────
+    if ашиг < 0:
+        хамгийн_бага_боломжит = өртөг * 1.15
+        санал    = min(max(хамгийн_бага_боломжит, одоогийн_үнэ * 1.20), суурь_үнэ)
+        үйлдэл   = "Үнэ нэмэх"
+        яаралтай = "Яаралтай"
+        шалтгаан.append(f"Алдагдалтай зарагдаж байна ({ашиг:.1f}% ашиг)")
+        шалтгаан.append(f"Өртөгт суурилсан хамгийн бага үнэ: {хамгийн_бага_боломжит:,.0f}₮")
 
-    # ── ТОХИОЛДОЛ 3: Сайн ашиг + Өндөр эрэлт ─────────────
-    elif margin >= 40 and demand == 'Өндөр' and monthly_q >= 50:
-        suggested = cur_price * 1.05
-        suggested = min(suggested, base_price * 1.02)
-        action    = 'Үнэ нэмэх'
-        urgency   = 'Дунд'
-        reasons.append(f"Эрэлт маш өндөр ({monthly_q:.0f} ш/сар), ашиг сайн ({margin:.1f}%)")
-        reasons.append("Борлуулалт буурахгүйгээр үнэ аажим нэмэх боломж байна")
+    # ── Дүрэм 2: Бага ашиг + өндөр эрэлт ────────────────────────────────────
+    elif ашиг < 20 and эрэлт == "Өндөр":
+        санал    = min(одоогийн_үнэ * 1.12, суурь_үнэ)
+        үйлдэл   = "Үнэ нэмэх"
+        яаралтай = "Яаралтай"
+        шалтгаан.append(f"Эрэлт өндөр ({сарын_тоо:.0f} ш/сар) боловч ашиг бага ({ашиг:.1f}%)")
+        шалтгаан.append("Эрэлт хүчтэй байх үед ашгийг нэмэгдүүлэх боломж байна")
 
-    # ── ТОХИОЛДОЛ 4: Бага эрэлт + Их хөнгөлөлт ──────────
-    elif demand == 'Бага' and discount > 15:
-        suggested = cur_price * 0.90
-        action    = 'Үнэ бууруулах'
-        urgency   = 'Дунд'
-        reasons.append(f"Эрэлт бага ({monthly_q:.1f} ш/сар), {discount:.1f}% хөнгөлөлттэй ч зарагдахгүй")
-        reasons.append("Үнийг бууруулж борлуулалтыг нэмэгдүүлэх")
+    # ── Дүрэм 3: Сайн ашиг + маш өндөр эрэлт ────────────────────────────────
+    elif ашиг >= 40 and эрэлт == "Өндөр" and сарын_тоо >= 50:
+        санал    = min(одоогийн_үнэ * 1.05, суурь_үнэ * 1.02)
+        үйлдэл   = "Үнэ нэмэх"
+        яаралтай = "Дунд"
+        шалтгаан.append(f"Эрэлт маш өндөр ({сарын_тоо:.0f} ш/сар), ашиг сайн ({ашиг:.1f}%)")
+        шалтгаан.append("Борлуулалт буурахгүйгээр аажим үнэ нэмэх боломжтой")
 
-    # ── ТОХИОЛДОЛ 5: Бага эрэлт + Сайн ашиг ─────────────
-    elif demand == 'Бага' and margin > 30 and discount < 5:
-        suggested = cur_price * 0.93
-        action    = 'Үнэ бууруулах'
-        urgency   = 'Дунд'
-        reasons.append(f"Эрэлт бага ({monthly_q:.1f} ш/сар), ашиг хангалттай ({margin:.1f}%)")
-        reasons.append("Үнийг бага зэрэг бууруулж эрэлтийг нэмэгдүүлэх")
+    # ── Дүрэм 4: Бага эрэлт + их хөнгөлөлттэй ч зарагдахгүй ────────────────
+    elif эрэлт == "Бага" and хөнгөлөлт > 15:
+        санал    = одоогийн_үнэ * 0.90
+        үйлдэл   = "Үнэ бууруулах"
+        яаралтай = "Дунд"
+        шалтгаан.append(f"Эрэлт бага ({сарын_тоо:.1f} ш/сар), {хөнгөлөлт:.1f}% хөнгөлөлттэй ч зарагдахгүй")
+        шалтгаан.append("Борлуулалт нэмэгдүүлэхийн тулд үнийг бууруулах")
 
-    # ── ТОХИОЛДОЛ 6: Удаан зарагдаагүй ──────────────────
-    elif days_last > 60 and margin > 20:
-        suggested = cur_price * 0.88
-        action    = 'Үнэ бууруулах'
-        urgency   = 'Дунд'
-        reasons.append(f"{days_last} хоногийн өмнө сүүлд зарагдсан")
-        reasons.append("Борлуулалт идэвхжүүлэхийн тулд үнэ бууруулах")
+    # ── Дүрэм 5: Бага эрэлт + сайн ашиг, бууруулах орон зай байна ───────────
+    elif эрэлт == "Бага" and ашиг > 30 and хөнгөлөлт < 5:
+        санал    = одоогийн_үнэ * 0.93
+        үйлдэл   = "Үнэ бууруулах"
+        яаралтай = "Дунд"
+        шалтгаан.append(f"Эрэлт бага ({сарын_тоо:.1f} ш/сар), гэхдээ ашиг бууруулахыг зөвшөөрнө ({ашиг:.1f}%)")
+        шалтгаан.append("Бага зэрэг үнэ буурвал илүү олон худалдан авагчийг татах боломжтой")
 
-    # ── ТОХИОЛДОЛ 7: Хөнгөлөлтгүй + Суурь үнээс доош ───
-    elif cur_price < base_price * 0.95 and margin > 45 and demand != 'Бага':
-        suggested = base_price * 0.98
-        action    = 'Үнэ нэмэх'
-        urgency   = 'Дунд'
-        reasons.append(f"Суурь үнэ {base_price:,.0f}₮ боловч {discount:.1f}% хямдаар зарагдаж байна")
-        reasons.append("Ашиг сайн, эрэлт байна — үнийг суурь үнэд ойртуулах")
+    # ── Дүрэм 6: Удаан хугацаанд зарагдаагүй ────────────────────────────────
+    elif идэвхгүй_хоног > 60 and ашиг > 20:
+        санал    = одоогийн_үнэ * 0.88
+        үйлдэл   = "Үнэ бууруулах"
+        яаралтай = "Дунд"
+        шалтгаан.append(f"{идэвхгүй_хоног} хоногийн өмнө сүүлд зарагдсан")
+        шалтгаан.append("Борлуулалт идэвхжүүлэхийн тулд үнэ бууруулах")
 
-    # ── ТОХИОЛДОЛ 8: Оновчтой байна ──────────────────────
+    # ── Дүрэм 7: Шаардлагагүйгээр суурь үнээс хамаагүй доош үнэлэгдсэн ─────
+    elif одоогийн_үнэ < суурь_үнэ * 0.95 and ашиг > 45 and эрэлт != "Бага":
+        санал    = суурь_үнэ * 0.98
+        үйлдэл   = "Үнэ нэмэх"
+        яаралтай = "Дунд"
+        шалтгаан.append(f"Шаардлагагүйгээр суурь үнэ ({суурь_үнэ:,.0f}₮)-аас {хөнгөлөлт:.1f}% доош зарагдаж байна")
+        шалтгаан.append("Ашиг ба эрэлт хангалттай — суурь үнэд ойртуулах боломжтой")
+
+    # ── Дүрэм 8: Одоогийн үнэ зохистой ──────────────────────────────────────
     else:
-        reasons.append(f"Одоогийн үнэ зохистой: ашиг {margin:.1f}%, эрэлт {demand.lower()}")
+        шалтгаан.append(f"Одоогийн үнэ тохиромжтой: {ашиг:.1f}% ашиг, {эрэлт.lower()} эрэлт")
 
-    # Үнэ өртөгөөс доош болохгүй
-    if cost_price > 0 and suggested < cost_price * 1.05:
-        suggested = cost_price * 1.10
-        reasons.append(f"⚠️ Өртөгийн доод хязгаар хамгаалалт: {cost_price:,.0f}₮")
+    # Аюулгүй байдлын хамгаалалт: өртгийн 5%-ийн нөөцөөс доош бууруулахгүй
+    if өртөг > 0 and санал < өртөг * 1.05:
+        санал = өртөг * 1.10
+        шалтгаан.append(f"⚠️ Өртгийн доод хязгаар хэрэгжлээ: {өртөг:,.0f}₮")
 
-    suggested = round(suggested / 10) * 10  # 10-ын үржвэрт дугуйлах
+    # 10-ын үржвэрт дугуйлах
+    санал = round(санал / 10) * 10
 
-    change_amt = suggested - cur_price
-    change_pct = (change_amt / cur_price * 100) if cur_price > 0 else 0
+    # Өөрчлөлт 0.5%-иас бага бол өөрчлөхгүй гэж үзнэ
+    өөрчлөлтийн_дүн = санал - одоогийн_үнэ
+    өөрчлөлтийн_хувь = (өөрчлөлтийн_дүн / одоогийн_үнэ * 100) if одоогийн_үнэ > 0 else 0
 
-    if abs(change_pct) < 0.5:
-        action    = 'Өөрчлөхгүй'
-        urgency   = 'Хойшлуулж болно'
-        suggested = int(round(cur_price / 10) * 10)
+    if abs(өөрчлөлтийн_хувь) < 0.5:
+        үйлдэл   = "Өөрчлөхгүй"
+        яаралтай = "Бага зэрэг"
+        санал    = int(round(одоогийн_үнэ / 10) * 10)
 
     return {
-        'item_id':         item_id,
-        'category':        row['CategoryPkId'],
-        'group':           row['GroupPkId'],
-        'brand':           row['BrandPkId'],
-        'cost_price':      int(cost_price),
-        'current_price':   int(round(cur_price)),
-        'base_price':      int(round(base_price)),
-        'suggested_price': int(suggested),
-        'change_pct':      f"{change_pct:+.1f}%",
-        'change_amount':   int(change_amt),
-        'action':          action,
-        'urgency':         urgency,
-        'margin_pct':      round(margin, 1),
-        'margin_label':    row['margin_label'],
-        'demand_level':    demand,
-        'avg_monthly_qty': round(monthly_q, 1),
-        'total_qty':       int(row['total_qty']),
-        'months_active':   int(row['months_active']),
-        'reason':          ' | '.join(reasons),
-        'engine':          'rule-based-v2'
+        "бараа_дугаар":       мөр["ItemPkId"],
+        "ангилал":            мөр["CategoryPkId"],
+        "бүлэг":              мөр["GroupPkId"],
+        "брэнд":              мөр["BrandPkId"],
+        "өртөг":              int(өртөг),
+        "одоогийн_үнэ":       int(round(одоогийн_үнэ)),
+        "суурь_үнэ":          int(round(суурь_үнэ)),
+        "санал_болгох_үнэ":   int(санал),
+        "өөрчлөлтийн_хувь":  f"{өөрчлөлтийн_хувь:+.1f}%",
+        "өөрчлөлтийн_дүн":   int(өөрчлөлтийн_дүн),
+        "үйлдэл":             үйлдэл,
+        "яаралтай":           яаралтай,
+        "ашгийн_хувь":        round(ашиг, 1),
+        "ашгийн_ангилал":     мөр["ашгийн_ангилал"],
+        "эрэлтийн_түвшин":    эрэлт,
+        "сарын_дундаж_тоо":   round(сарын_тоо, 1),
+        "нийт_тоо":           int(мөр["нийт_тоо"]),
+        "идэвхтэй_сар":       int(мөр["идэвхтэй_сар"]),
+        "шалтгаан":           " | ".join(шалтгаан),
+        "хөдөлгүүр":          "дүрэм-суурилсан-v2",
     }
 
 
-# ════════════════════════════════════════════════════════
-# 3. GEMINI API (AI тайлбар нэмэх)
-# ════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
+# Gemini AI Баяжуулалт (заавал биш)
+# ─────────────────────────────────────────────────────────────────────────────
 
-SYSTEM_PROMPT = """Та Монголын жижиглэн худалдааны үнэ тогтоогч мэргэжилтэн.
-Өгөгдөлд үндэслэн ЗӨВХӨН доорх JSON форматаар хариул. Монгол хэлээр бич.
+GEMINI_СИСТЕМИЙН_ЗААВАР = """Та Монголын жижиглэн худалдааны үнэ тогтоогч мэргэжилтэн.
+Бүтээгдэхүүний өгөгдөлд үндэслэн ЗӨВХӨН доорх JSON форматаар хариул. Монгол хэлээр бич.
 
 {
-  "reason_mn": "2-3 өгүүлбэр монгол тайлбар",
-  "suggested_price": тоо
+  "шалтгаан_мн": "Монгол хэл дээрх 2-3 өгүүлбэр тайлбар",
+  "санал_болгох_үнэ": <тоо>
 }"""
 
-def enrich_with_gemini(suggestion: dict, api_key: str) -> dict:
-    """Дүрмийн саналд Gemini-гаар монгол тайлбар нэмэх."""
+def gemini_тайлбар_нэмэх(санал: dict, api_түлхүүр: str) -> dict:
+    """
+    Дүрэмд суурилсан саналд Gemini ашиглан монгол хэлний тайлбар нэмнэ.
+    API дуудалт амжилтгүй болвол алдаагүйгээр буцна.
+    """
     try:
-        client = genai.Client(api_key=api_key)
-        prompt = f"""Барааны мэдээлэл:
-- Одоогийн үнэ: {suggestion['current_price']:,}₮
-- Санал болгох үнэ: {suggestion['suggested_price']:,}₮
-- Ашгийн хувь: {suggestion['margin_pct']}%
-- Эрэлт: {suggestion['demand_level']} ({suggestion['avg_monthly_qty']} ш/сар)
-- Өртөг: {suggestion['cost_price']:,}₮
-- Үйлдэл: {suggestion['action']}
-- Шалтгаан: {suggestion['reason']}
+        клиент = genai.Client(api_key=api_түлхүүр)
 
-Монгол хэлээр тайлбар бич."""
+        prompt = f"""Бүтээгдэхүүний мэдээлэл:
+- Одоогийн үнэ: {санал['одоогийн_үнэ']:,}₮
+- Санал болгох үнэ: {санал['санал_болгох_үнэ']:,}₮
+- Ашгийн хувь: {санал['ашгийн_хувь']}%
+- Эрэлт: {санал['эрэлтийн_түвшин']} ({санал['сарын_дундаж_тоо']} ш/сар)
+- Өртөг: {санал['өртөг']:,}₮
+- Үйлдэл: {санал['үйлдэл']}
+- Дүрмийн шалтгаан: {санал['шалтгаан']}
 
-        response = client.models.generate_content(
+Энэ үнийн саналд монгол хэлээр тайлбар бич."""
+
+        хариу = клиент.models.generate_content(
             model="gemini-2.0-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
+                system_instruction=GEMINI_СИСТЕМИЙН_ЗААВАР,
                 temperature=0.2,
                 max_output_tokens=200,
-            )
+            ),
         )
-        text = response.text.strip()
-        if "```" in text:
-            text = text.split("```")[1]
-            if text.startswith("json"):
-                text = text[4:]
-        result = json.loads(text.strip())
-        suggestion['reason_mn'] = result.get('reason_mn', suggestion['reason'])
-        suggestion['engine']    = 'gemini'
+
+        # Markdown хашилтуудыг хэрэв байвал хасах
+        текст = хариу.text.strip()
+        if "```" in текст:
+            текст = текст.split("```")[1]
+            if текст.startswith("json"):
+                текст = текст[4:]
+
+        үр_дүн = json.loads(текст.strip())
+        санал["шалтгаан_мн"] = үр_дүн.get("шалтгаан_мн", санал["шалтгаан"])
+        санал["хөдөлгүүр"]   = "gemini"
+
     except Exception:
-        suggestion['reason_mn'] = suggestion['reason']
-    return suggestion
+        # Бүх ажлыг зогсоохгүй — дүрмийн шалтгаан руу буцна
+        санал["шалтгаан_мн"] = санал["шалтгаан"]
+
+    return санал
 
 
-# ════════════════════════════════════════════════════════
-# 4. ҮНДСЭН АГЕНТ
-# ════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
+# Үндсэн Агент
+# ─────────────────────────────────────────────────────────────────────────────
 
-def run_agent(csv_path, api_key=None, use_local=False,
-              top_n=None, output_path="results.json", gemini_top=50):
+def агент_ажиллуулах(
+    csv_зам:       str,
+    api_түлхүүр:   str = None,
+    дээд_тоо:      int = None,
+    гаралтын_зам:  str = "үр_дүн.json",
+    gemini_дээд:   int = 50,
+) -> dict:
+    """
+    Бүрэн дамжуулах хоолой: өгөгдөл ачаалах → бүтээгдэхүүн үнэлэх → үнэ санал болгох → хадгалах.
 
-    print("\n" + "═"*55)
+    Аргументууд:
+        csv_зам:      Борлуулалтын CSV файлын зам.
+        api_түлхүүр: AI тайлбарт зориулсан Gemini API түлхүүр (заавал биш).
+        дээд_тоо:    Зөвхөн тэргүүлэх N бүтээгдэхүүнийг боловсруулах (None = бүгд).
+        гаралтын_зам: JSON үр дүнгийн файлын зам.
+        gemini_дээд: Gemini-гаар баяжуулах бүтээгдэхүүний дээд тоо.
+    """
+    print("\n" + "═" * 55)
     print("  AI ҮНИЙН САНАЛ БОЛГОХ АГЕНТ  v2")
-    print("  Монголын жижиглэн худалдааны систем")
-    print("═"*55)
+    print("  Монголын Жижиглэн Худалдааны Үнийн Оновчлогч")
+    print("═" * 55)
 
-    # Өгөгдөл ачаалах + шинжлэх
-    items = load_and_analyze(csv_path)
+    бүтээгдэхүүнүүд = ачаалах_шинжлэх(csv_зам)
 
-    # Хэдэн бараа шинжлэх
-    if top_n:
-        # Тэргүүлэх барааг эхэлж — алдагдалтай → бага ашиг → бага эрэлт
-        items['priority'] = (
-            (items['margin_pct'] < 0).astype(int) * 4 +
-            (items['margin_pct'] < 20).astype(int) * 2 +
-            (items['demand_level'] == 'Бага').astype(int)
+    # Шаардлагатай бол хамгийн тэргүүлэх бүтээгдэхүүнүүдийг эхэлж авах
+    if дээд_тоо:
+        # Тэргүүлэх оноо: алдагдалтай > бага ашиг > бага эрэлт
+        бүтээгдэхүүнүүд["тэргүүлэх_оноо"] = (
+            (бүтээгдэхүүнүүд["ашгийн_хувь"] < 0).astype(int)            * 4 +
+            (бүтээгдэхүүнүүд["ашгийн_хувь"] < 20).astype(int)           * 2 +
+            (бүтээгдэхүүнүүд["эрэлтийн_түвшин"] == "Бага").astype(int)
         )
-        process_items = items.nlargest(top_n, 'priority')
-        print(f"\n🎯 Тэргүүлэх {top_n} бараа сонгогдлоо")
+        боловсруулах = бүтээгдэхүүнүүд.nlargest(дээд_тоо, "тэргүүлэх_оноо")
+        print(f"\n🎯 Тэргүүлэх {дээд_тоо} бүтээгдэхүүн боловсруулагдана")
     else:
-        process_items = items
-        print(f"\n🎯 Бүх {len(items):,} бараа шинжлэгдэнэ")
+        боловсруулах = бүтээгдэхүүнүүд
+        print(f"\n🎯 Бүх {len(бүтээгдэхүүнүүд):,} бүтээгдэхүүн боловсруулагдана")
 
-    engine_label = "Gemini API + Дүрэм" if api_key else "Дүрэм-суурилсан v2"
-    print(f"🤖 AI хөдөлгүүр: {engine_label}")
-    print("─"*55)
+    хөдөлгүүрийн_нэр = "Gemini AI + Дүрэм" if api_түлхүүр else "Дүрэм-суурилсан v2"
+    print(f"🤖 Хөдөлгүүр: {хөдөлгүүрийн_нэр}")
+    print("─" * 55)
 
-    results   = []
-    gemini_used = 0
+    үр_дүнгүүд   = []
+    gemini_тоо   = 0
 
-    for i, (_, row) in enumerate(process_items.iterrows(), 1):
-        # Дүрэм дээр суурилсан санал
-        suggestion = smart_pricing_rule(row)
+    яаралтай_тэмдэг = {
+        "Яаралтай":  "🔴",
+        "Дунд":      "🟡",
+        "Бага зэрэг":"🟢",
+    }
 
-        # Алдагдалтай эсвэл яаралтай барааг Gemini-гаар баяжуулах
-        if api_key and suggestion['urgency'] == 'Яаралтай' and gemini_used < gemini_top:
-            suggestion = enrich_with_gemini(suggestion, api_key)
-            gemini_used += 1
+    for байрлал, (_, мөр) in enumerate(боловсруулах.iterrows(), start=1):
+        санал = үнэ_санал_болгох(мөр)
+
+        # Зөвхөн яаралтай бүтээгдэхүүнд, тохируулсан хязгаар хүртэл Gemini ашиглах
+        if api_түлхүүр and санал["яаралтай"] == "Яаралтай" and gemini_тоо < gemini_дээд:
+            санал       = gemini_тайлбар_нэмэх(санал, api_түлхүүр)
+            gemini_тоо += 1
         else:
-            suggestion['reason_mn'] = suggestion['reason']
+            санал["шалтгаан_мн"] = санал["шалтгаан"]
 
-        results.append(suggestion)
+        үр_дүнгүүд.append(санал)
 
-        urgency_icon = {"Яаралтай": "🔴", "Дунд": "🟡",
-                        "Хойшлуулж болно": "🟢"}.get(suggestion['urgency'], "⚪")
-        if i <= 30 or suggestion['urgency'] == 'Яаралтай':
-            print(f"  {i:>4}. {row['ItemPkId']:<14} "
-                  f"{suggestion['current_price']:>8,}₮ → "
-                  f"{suggestion['suggested_price']:>8,}₮  "
-                  f"{suggestion['change_pct']:>7}  "
-                  f"{urgency_icon} {suggestion['action']}")
+        # Эхний 30 болон яаралтай бүтээгдэхүүний явцыг харуулах
+        if байрлал <= 30 or санал["яаралтай"] == "Яаралтай":
+            тэмдэг = яаралтай_тэмдэг.get(санал["яаралтай"], "⚪")
+            print(
+                f"  {байрлал:>4}. {мөр['ItemPkId']:<14} "
+                f"{санал['одоогийн_үнэ']:>8,}₮ → "
+                f"{санал['санал_болгох_үнэ']:>8,}₮  "
+                f"{санал['өөрчлөлтийн_хувь']:>7}  "
+                f"{тэмдэг} {санал['үйлдэл']}"
+            )
 
-    if len(results) > 30:
-        print(f"       ... нийт {len(results):,} бараа шинжлэгдсэн")
+    if len(үр_дүнгүүд) > 30:
+        print(f"       ... нийт {len(үр_дүнгүүд):,} бүтээгдэхүүн шинжлэгдсэн")
 
-    # Нэгтгэл
-    summary = {
-        'price_increase':  sum(1 for r in results if 'нэмэх'      in r['action']),
-        'price_decrease':  sum(1 for r in results if 'бууруулах'   in r['action']),
-        'no_change':       sum(1 for r in results if 'Өөрчлөхгүй' in r['action']),
-        'urgent':          sum(1 for r in results if r['urgency']  == 'Яаралтай'),
-        'medium':          sum(1 for r in results if r['urgency']  == 'Дунд'),
-        'low':             sum(1 for r in results if r['urgency']  == 'Хойшлуулж болно'),
-        'gemini_enriched': gemini_used,
-        'avg_change_pct':  round(sum(r['change_amount'] for r in results) /
-                                 max(sum(r['current_price'] for r in results), 1) * 100, 2),
+    # Нэгтгэсэн статистик
+    хураангуй = {
+        "үнэ_нэмэх":       sum(1 for р in үр_дүнгүүд if "нэмэх"      in р["үйлдэл"]),
+        "үнэ_бууруулах":   sum(1 for р in үр_дүнгүүд if "бууруулах"  in р["үйлдэл"]),
+        "өөрчлөхгүй":      sum(1 for р in үр_дүнгүүд if "Өөрчлөхгүй" in р["үйлдэл"]),
+        "яаралтай_тоо":    sum(1 for р in үр_дүнгүүд if р["яаралтай"] == "Яаралтай"),
+        "дунд_тоо":        sum(1 for р in үр_дүнгүүд if р["яаралтай"] == "Дунд"),
+        "бага_тоо":        sum(1 for р in үр_дүнгүүд if р["яаралтай"] == "Бага зэрэг"),
+        "gemini_баяжуулсан": gemini_тоо,
+        "дундаж_өөрчлөлт_хувь": round(
+            sum(р["өөрчлөлтийн_дүн"] for р in үр_дүнгүүд) /
+            max(sum(р["одоогийн_үнэ"] for р in үр_дүнгүүд), 1) * 100,
+            2
+        ),
     }
 
-    output = {
-        'generated_at':         datetime.now().isoformat(),
-        'engine':               engine_label,
-        'total_items_analyzed': len(results),
-        'summary':              summary,
-        'results':              results
+    гаралт = {
+        "үүсгэсэн_огноо":      datetime.now().isoformat(),
+        "хөдөлгүүр":           хөдөлгүүрийн_нэр,
+        "нийт_шинжилсэн_тоо":  len(үр_дүнгүүд),
+        "хураангуй":           хураангуй,
+        "үр_дүнгүүд":          үр_дүнгүүд,
     }
 
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(output, f, ensure_ascii=False, indent=2)
+    with open(гаралтын_зам, "w", encoding="utf-8") as ф:
+        json.dump(гаралт, ф, ensure_ascii=False, indent=2)
 
-    print("\n" + "═"*55)
+    # Эцсийн хураангуй
+    print("\n" + "═" * 55)
     print("  ДҮГНЭЛТ")
-    print("─"*55)
-    print(f"  Нийт шинжилсэн бараа  : {len(results):,}")
-    print(f"  🔴 Үнэ нэмэх (яаралтай): {summary['urgent']:,}")
-    print(f"  🟡 Үнэ өөрчлөх (дунд)  : {summary['medium']:,}")
-    print(f"  🟢 Өөрчлөхгүй          : {summary['low']:,}")
-    print(f"  📈 Үнэ нэмэх санал     : {summary['price_increase']:,}")
-    print(f"  📉 Үнэ бууруулах санал : {summary['price_decrease']:,}")
-    if gemini_used:
-        print(f"  🤖 Gemini тайлбар      : {gemini_used} бараа")
-    print(f"\n  💾 Хадгалсан: {output_path}")
-    print("═"*55 + "\n")
+    print("─" * 55)
+    print(f"  Нийт шинжилсэн бүтээгдэхүүн : {len(үр_дүнгүүд):,}")
+    print(f"  🔴 Яаралтай үнийн өөрчлөлт  : {хураангуй['яаралтай_тоо']:,}")
+    print(f"  🟡 Дунд зэргийн тэргүүлэлт   : {хураангуй['дунд_тоо']:,}")
+    print(f"  🟢 Өөрчлөлт шаардлагагүй     : {хураангуй['бага_тоо']:,}")
+    print(f"  📈 Үнэ нэмэх санал            : {хураангуй['үнэ_нэмэх']:,}")
+    print(f"  📉 Үнэ бууруулах санал        : {хураангуй['үнэ_бууруулах']:,}")
+    if gemini_тоо:
+        print(f"  🤖 Gemini тайлбар             : {gemini_тоо}")
+    print(f"\n  💾 Хадгалсан: {гаралтын_зам}")
+    print("═" * 55 + "\n")
 
-    return output
+    return гаралт
 
 
-# ════════════════════════════════════════════════════════
-# 5. CLI
-# ════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
+# Командын Мөрний Оролт
+# ─────────────────────────────────────────────────────────────────────────────
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="AI Үнийн Санал Болгох Агент v2")
-    parser.add_argument("--csv",        required=True)
-    parser.add_argument("--api-key",    default=None)
-    parser.add_argument("--local",      action="store_true")
-    parser.add_argument("--top",        type=int, default=None,
-                        help="Шинжлэх барааны тоо (хоосон = бүгд)")
-    parser.add_argument("--gemini-top", type=int, default=50,
-                        help="Gemini-гаар баяжуулах барааны дээд тоо")
-    parser.add_argument("--output",     default="results.json")
-    args = parser.parse_args()
+def үндсэн():
+    задлагч = argparse.ArgumentParser(
+        description="AI Үнийн Санал Болгох Агент — Монголын Жижиглэн Худалдааны Оновчлогч"
+    )
+    задлагч.add_argument(
+        "--csv",
+        required=True,
+        help="Борлуулалтын CSV файлын зам"
+    )
+    задлагч.add_argument(
+        "--api-key",
+        default=None,
+        help="AI тайлбарт зориулсан Gemini API түлхүүр (эсвэл GEMINI_API_KEY орчны хувьсагч)"
+    )
+    задлагч.add_argument(
+        "--top",
+        type=int,
+        default=None,
+        help="Шинжлэх бүтээгдэхүүний тоо (өгөгдөөгүй бол бүгд)"
+    )
+    задлагч.add_argument(
+        "--gemini-top",
+        type=int,
+        default=50,
+        help="Gemini-гаар баяжуулах бүтээгдэхүүний дээд тоо (өгөгдмөл: 50)"
+    )
+    задлагч.add_argument(
+        "--output",
+        default="үр_дүн.json",
+        help="Гаралтын JSON файлын зам (өгөгдмөл: үр_дүн.json)"
+    )
 
-    if not os.path.exists(args.csv):
-        print(f"❌ Файл олдсонгүй: {args.csv}")
+    аргументууд = задлагч.parse_args()
+
+    if not os.path.exists(аргументууд.csv):
+        print(f"❌ Файл олдсонгүй: {аргументууд.csv}")
         sys.exit(1)
 
-    run_agent(
-        csv_path   = args.csv,
-        api_key    = args.api_key or os.environ.get("GEMINI_API_KEY"),
-        use_local  = args.local,
-        top_n      = args.top,
-        output_path= args.output,
-        gemini_top = args.gemini_top,
+    агент_ажиллуулах(
+        csv_зам      = аргументууд.csv,
+        api_түлхүүр  = аргументууд.api_key or os.environ.get("GEMINI_API_KEY"),
+        дээд_тоо     = аргументууд.top,
+        гаралтын_зам = аргументууд.output,
+        gemini_дээд  = аргументууд.gemini_top,
     )
+
+
+if __name__ == "__main__":
+    үндсэн()
+
+    #python pricing_agent_v2.py --csv int.csv
+    #python pricing_agent_v2.py --csv int.csv --top 100
+    #python pricing_agent_v2.py --csv int.csv --api-key REDACTED
+    #python pricing_agent_v2.py --csv int.csv --api-key REDACTED --top 200 --gemini-top 50 --output resultss.json
