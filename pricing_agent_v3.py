@@ -757,5 +757,5 @@ def үндсэн():
 if __name__ == "__main__":
     үндсэн()
 
-    #python pricing_agent.py --csv int.csv
+    #python pricing_agent_v3.py --csv int.csv
     #open үр_дүн_dashboard.html
