@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Үнийн Санал Болгох Агент v3</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; color: #1a1a2e; }
+.page { padding: 1.5rem; max-width: 960px; margin: 0 auto; }
+.top-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 1.5rem; }
+.top-bar h1 { font-size: 20px; font-weight: 600; margin: 0; }
+.top-bar .ver { font-size: 12px; color: #64748b; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 8px; padding: 3px 10px; }
+.upload-zone {
+  border: 2px dashed #cbd5e1; border-radius: 12px; padding: 2.5rem;
+  text-align: center; cursor: pointer; transition: background 0.15s; margin-bottom: 1.5rem;
+  background: white;
+}
+.upload-zone:hover, .upload-zone.drag { background: #f8fafc; border-color: #94a3b8; }
+.upload-zone .icon { font-size: 40px; margin-bottom: 8px; }
+.upload-zone p { margin: 0; font-size: 15px; color: #475569; }
+.upload-zone .hint { font-size: 12px; color: #94a3b8; margin-top: 6px; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 1.5rem; }
+.stat { background: white; border-radius: 10px; padding: 14px 16px; border: 1px solid #e2e8f0; }
+.stat .num { font-size: 28px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+.stat .lbl { font-size: 12px; color: #64748b; }
+.stat.red .num { color: #b91c1c; }
+.stat.amber .num { color: #b45309; }
+.stat.blue .num { color: #1d4ed8; }
+.stat.green .num { color: #15803d; }
+.controls-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; }
+.controls-bar input, .controls-bar select {
+  font-size: 13px; padding: 8px 12px; border-radius: 8px;
+  border: 1px solid #d1d5db; background: white; color: #1a1a2e; outline: none;
+}
+.controls-bar input { flex: 1; min-width: 200px; }
+.controls-bar input:focus, .controls-bar select:focus { border-color: #6366f1; }
+.count-lbl { font-size: 12px; color: #94a3b8; }
+.dl-group { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+.dl-btn {
+  display: flex; align-items: center; gap: 6px; padding: 8px 14px;
+  border-radius: 8px; border: 1px solid #d1d5db; background: white;
+  color: #374151; font-size: 13px; cursor: pointer; white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s; font-weight: 500;
+}
+.dl-btn:hover { background: #f8fafc; }
+.dl-btn.filtered { border-color: #15803d; color: #15803d; }
+.dl-btn.filtered:hover { background: #f0fdf4; }
+.dl-btn.all { border-color: #1d4ed8; color: #1d4ed8; }
+.dl-btn.all:hover { background: #eff6ff; }
+.tbl-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid #e2e8f0; background: white; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead { background: #f8fafc; }
+th { padding: 11px 13px; text-align: left; font-weight: 600; font-size: 12px; color: #64748b; white-space: nowrap; border-bottom: 1px solid #e2e8f0; }
+td { padding: 10px 13px; border-bottom: 1px solid #f1f5f9; color: #1a1a2e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #f8fafc; }
+.badge { display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+.b-red    { background: #fee2e2; color: #b91c1c; }
+.b-amber  { background: #fef3c7; color: #b45309; }
+.b-green  { background: #dcfce7; color: #15803d; }
+.b-blue   { background: #dbeafe; color: #1d4ed8; }
+.b-gray   { background: #f1f5f9; color: #64748b; }
+.pos { color: #b45309; font-weight: 600; }
+.neg { color: #1d4ed8; font-weight: 600; }
+.empty-state { text-align: center; padding: 3rem; color: #94a3b8; font-size: 14px; }
+.toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: #1e293b; color: white; padding: 11px 20px;
+  border-radius: 10px; font-size: 13px; opacity: 0;
+  transition: opacity 0.25s; pointer-events: none; z-index: 999;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+}
+.toast.show { opacity: 1; }
+.footer { text-align: center; padding: 2rem 0 1rem; font-size: 12px; color: #94a3b8; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="top-bar">
+   <!--<span style="font-size:26px">🤖</span>. -->
+    <h1>AI Үнийн Санал Болгох Агент</h1>
+    <span class="ver">v3</span>
+  </div>
+
+  <div class="upload-zone" id="zone"
+    onclick="document.getElementById('file-in').click()"
+    ondragover="ev(event,'drag')"
+    ondragleave="ev(event,'')"
+    ondrop="drop(event)">
+    <div class="icon">📊</div>
+    <p>CSV файл оруулах</p>
+    <p class="hint">Дарах эсвэл чирж тавих &nbsp;·&nbsp; Шаардлагатай баганууд: Price, BasePrice, Profit, SalesQty, Amount, SaleDate</p>
+    <input type="file" id="file-in" accept=".csv" style="display:none" onchange="load(event)">
+  </div>
+
+  <div id="stats-area" style="display:none">
+    <div class="stats-grid" id="stats-grid"></div>
+
+    <div class="controls-bar">
+      <input type="text" id="search" placeholder="🔍  Хайх (ID, ангилал, брэнд...)" oninput="filter()">
+      <select id="f-urg" onchange="filter()">
+        <option value="">Яаралтай байдал — бүгд</option>
+        <option value="Яаралтай">🔴 Яаралтай</option>
+        <option value="Дунд">🟡 Дунд</option>
+        <option value="Бага зэрэг">🟢 Бага зэрэг</option>
+      </select>
+      <select id="f-act" onchange="filter()">
+        <option value="">Үйлдэл — бүгд</option>
+        <option value="Үнэ нэмэх">📈 Үнэ нэмэх</option>
+        <option value="Үнэ бууруулах">📉 Үнэ бууруулах</option>
+        <option value="Өөрчлөхгүй">✅ Өөрчлөхгүй</option>
+      </select>
+      <select id="f-dem" onchange="filter()">
+        <option value="">Эрэлт — бүгд</option>
+        <option value="Өндөр">Өндөр эрэлт</option>
+        <option value="Дунд">Дунд эрэлт</option>
+        <option value="Бага">Бага эрэлт</option>
+      </select>
+      <span class="count-lbl" id="cnt"></span>
+      <div class="dl-group">
+        <button class="dl-btn filtered" onclick="downloadCSV('filtered')">
+          ⬇ Шүүгдсэн CSV
+        </button>
+        <button class="dl-btn all" onclick="downloadCSV('all')">
+          ⬇ Бүгдийг татах
+        </button>
+      </div>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Бараа ID</th>
+            <th>Ангилал</th>
+            <th>Брэнд</th>
+            <th>Одоогийн үнэ</th>
+            <th>Суурь үнэ</th>
+            <th>Санал болгох үнэ</th>
+            <th>Өөрчлөлт %</th>
+            <th>Үйлдэл</th>
+            <th>Яаралтай</th>
+            <th>Ашиг %</th>
+            <th>Эрэлт</th>
+            <th>Ш/сар</th>
+            <th>Шалтгаан</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="empty-state" id="empty" style="display:none">Хайлтад тохирох бүтээгдэхүүн олдсонгүй.</div>
+    </div>
+  </div>
+
+  <div class="footer">AI Үнийн Санал Болгох Агент v3 &nbsp;·&nbsp; Монголын жижиглэн худалдааны үнийн оновчлогч</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let DATA = [];
+let FILTERED = [];
+
+function ev(e, cls) {
+  e.preventDefault();
+  document.getElementById('zone').className = 'upload-zone' + (cls ? ' ' + cls : '');
+}
+function drop(e) {
+  e.preventDefault();
+  document.getElementById('zone').className = 'upload-zone';
+  const f = e.dataTransfer.files[0];
+  if (f) parseCSV(f);
+}
+function load(e) {
+  const f = e.target.files[0];
+  if (f) parseCSV(f);
+}
+
+function parseCSV(file) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const lines = e.target.result.split('\n').map(l => l.trim()).filter(l => l);
+    if (lines.length < 2) { showToast('CSV файл хоосон байна'); return; }
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) {
+      const vals = lines[i].split(',');
+      const row = {};
+      headers.forEach((h, j) => { row[h] = (vals[j] || '').trim().replace(/"/g, ''); });
+      rows.push(row);
+    }
+    DATA = analyze(rows);
+    render();
+    showToast(DATA.length.toLocaleString() + ' бүтээгдэхүүн шинжлэгдлээ ✓');
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+function toN(v) { return parseFloat(v) || 0; }
+
+function analyze(rows) {
+  const median = arr => { const s = [...arr].sort((a,b)=>a-b); return s[Math.floor(s.length/2)] || 0; };
+  const priceMedian = median(rows.map(r => toN(r.Price)));
+
+  const valid = rows.filter(r =>
+    toN(r.Price) >= 50 && toN(r.BasePrice) >= 50 &&
+    toN(r.SalesQty) > 0 && toN(r.Amount) > 0 &&
+    toN(r.Price) < priceMedian * 500
+  );
+
+  const groups = {};
+  valid.forEach(r => {
+    const k = r.ItemPkId || r.item_id || r.id || Object.values(r)[0];
+    if (!groups[k]) groups[k] = { id: k, cat: r.CategoryPkId||'', grp: r.GroupPkId||'', brand: r.BrandPkId||'', rows: [] };
+    groups[k].rows.push(r);
+  });
+
+  const items = Object.values(groups).map(g => {
+    const prices   = g.rows.map(r => toN(r.Price));
+    const bases    = g.rows.map(r => toN(r.BasePrice));
+    const qtys     = g.rows.map(r => toN(r.SalesQty));
+    const amts     = g.rows.map(r => toN(r.Amount));
+    const profs    = g.rows.map(r => toN(r.Profit));
+    const totalQty  = qtys.reduce((a,b)=>a+b,0);
+    const totalAmt  = amts.reduce((a,b)=>a+b,0);
+    const totalProf = profs.reduce((a,b)=>a+b,0);
+    const avgPrice  = prices.reduce((a,b)=>a+b,0) / prices.length;
+    const avgBase   = bases.reduce((a,b)=>a+b,0)  / bases.length;
+    const profPct   = totalAmt > 0 ? (totalProf / totalAmt * 100) : 0;
+    const cost      = totalQty > 0 ? avgPrice - (totalProf / totalQty) : avgPrice * 0.6;
+    const discount  = avgBase > 0 ? Math.max(0, (avgBase - avgPrice) / avgBase * 100) : 0;
+    const months    = new Set(g.rows.map(r => (r.SaleDate||'').slice(0,7))).size || 1;
+    const monthlyQty = totalQty / months;
+    const lastSale  = g.rows.map(r => r.SaleDate||'').sort().pop() || '';
+    const daysSince = lastSale
+      ? Math.floor((Date.now() - new Date(lastSale)) / 86400000)
+      : 9999;
+    return { id: g.id, cat: g.cat, brand: g.brand, avgPrice, avgBase, cost, profPct, discount, monthlyQty, totalQty, months, daysSince };
+  });
+
+  const sorted = items.map(i => i.monthlyQty).sort((a,b)=>a-b);
+  const q25 = sorted[Math.floor(items.length * 0.25)] || 1;
+  const q75 = sorted[Math.floor(items.length * 0.75)] || 10;
+
+  return items.map(item => {
+    const demand = item.monthlyQty >= q75 ? 'Өндөр' : item.monthlyQty >= q25 ? 'Дунд' : 'Бага';
+    const rec = recommend(item, demand);
+    return { ...item, demand, ...rec };
+  });
+}
+
+function recommend(item, demand) {
+  const { avgPrice, avgBase, cost, profPct, discount, monthlyQty, daysSince } = item;
+  const safeCost = Math.max(cost, avgPrice * 0.40);
+  let price = avgPrice, action = 'Өөрчлөхгүй', urgency = 'Бага зэрэг', reason = '';
+
+  if (profPct < 0) {
+    price = Math.min(Math.max(safeCost * 1.15, avgPrice * 1.20), avgBase);
+    action = 'Үнэ нэмэх'; urgency = 'Яаралтай';
+    reason = 'Алдагдалтай зарагдаж байна (' + profPct.toFixed(1) + '%)';
+  } else if (profPct < 20 && demand === 'Өндөр') {
+    price = Math.min(avgPrice * 1.12, avgBase);
+    action = 'Үнэ нэмэх'; urgency = 'Яаралтай';
+    reason = 'Эрэлт өндөр, ашиг бага (' + profPct.toFixed(1) + '%)';
+  } else if (profPct >= 40 && demand === 'Өндөр' && monthlyQty >= 50) {
+    price = Math.min(avgPrice * 1.05, avgBase * 1.02);
+    action = 'Үнэ нэмэх'; urgency = 'Дунд';
+    reason = 'Эрэлт маш өндөр, аажим үнэ нэмэх боломж';
+  } else if (demand === 'Бага' && discount > 15) {
+    price = avgPrice * 0.90;
+    action = 'Үнэ бууруулах'; urgency = 'Дунд';
+    reason = 'Эрэлт бага, ' + discount.toFixed(1) + '% хөнгөлөлттэй ч зарагдахгүй';
+  } else if (demand === 'Бага' && profPct > 30 && discount < 5) {
+    price = avgPrice * 0.93;
+    action = 'Үнэ бууруулах'; urgency = 'Дунд';
+    reason = 'Эрэлт бага, үнэ бууруулж худалдан авагч татах';
+  } else if (daysSince > 60 && profPct > 20) {
+    price = avgPrice * 0.88;
+    action = 'Үнэ бууруулах'; urgency = 'Дунд';
+    reason = daysSince + ' хоногийн өмнө сүүлд зарагдсан';
+  } else if (avgPrice < avgBase * 0.95 && profPct > 45 && demand !== 'Бага') {
+    price = avgBase * 0.98;
+    action = 'Үнэ нэмэх'; urgency = 'Дунд';
+    reason = 'Суурь үнээс шаардлагагүй доош зарагдаж байна';
+  } else {
+    reason = 'Одоогийн үнэ тохиромжтой: ' + profPct.toFixed(1) + '% ашиг';
+  }
+
+  if (safeCost > 0 && price < safeCost * 1.05) {
+    price = safeCost * 1.10;
+    reason += ' · өртгийн доод хязгаар хэрэгжлээ';
+  }
+
+  price = Math.round(price / 10) * 10;
+  const chgPct = avgPrice > 0 ? (price - avgPrice) / avgPrice * 100 : 0;
+  if (Math.abs(chgPct) < 0.5) { action = 'Өөрчлөхгүй'; urgency = 'Бага зэрэг'; }
+
+  return { sugPrice: price, chgPct: Math.round(chgPct * 10) / 10, action, urgency, reason };
+}
+
+function fmt(n) { return Math.round(n).toLocaleString('mn-MN') + '₮'; }
+
+function render() {
+  const urgent = DATA.filter(d => d.urgency === 'Яаралтай').length;
+  const up     = DATA.filter(d => d.action  === 'Үнэ нэмэх').length;
+  const dn     = DATA.filter(d => d.action  === 'Үнэ бууруулах').length;
+  const ok     = DATA.filter(d => d.action  === 'Өөрчлөхгүй').length;
+
+  document.getElementById('stats-grid').innerHTML =
+    '<div class="stat red"><div class="num">'   + urgent + '</div><div class="lbl">🔴 Яаралтай</div></div>' +
+    '<div class="stat amber"><div class="num">' + up     + '</div><div class="lbl">📈 Үнэ нэмэх</div></div>' +
+    '<div class="stat blue"><div class="num">'  + dn     + '</div><div class="lbl">📉 Үнэ бууруулах</div></div>' +
+    '<div class="stat green"><div class="num">' + ok     + '</div><div class="lbl">✅ Өөрчлөхгүй</div></div>' +
+    '<div class="stat"><div class="num">'       + DATA.length.toLocaleString() + '</div><div class="lbl">📦 Нийт бараа</div></div>';
+
+  document.getElementById('stats-area').style.display = '';
+  filter();
+}
+
+function urgBadge(v) {
+  const cls = v === 'Яаралтай' ? 'b-red' : v === 'Дунд' ? 'b-amber' : 'b-green';
+  return '<span class="badge ' + cls + '">' + v + '</span>';
+}
+function actBadge(v) {
+  const cls = v.includes('нэмэх') ? 'b-amber' : v.includes('бууруулах') ? 'b-blue' : 'b-gray';
+  return '<span class="badge ' + cls + '">' + v + '</span>';
+}
+
+function filter() {
+  const s  = (document.getElementById('search').value || '').toLowerCase();
+  const fu = document.getElementById('f-urg').value;
+  const fa = document.getElementById('f-act').value;
+  const fd = document.getElementById('f-dem').value;
+
+  FILTERED = DATA.filter(d => {
+    const match = !s ||
+      d.id.toString().toLowerCase().includes(s) ||
+      d.cat.toString().toLowerCase().includes(s) ||
+      d.brand.toString().toLowerCase().includes(s);
+    return match && (!fu || d.urgency === fu) && (!fa || d.action === fa) && (!fd || d.demand === fd);
+  });
+
+  document.getElementById('tbody').innerHTML = FILTERED.map(d => {
+    const sign   = d.chgPct > 0 ? '+' : '';
+    const chgCls = d.chgPct > 0 ? 'pos' : d.chgPct < 0 ? 'neg' : '';
+    return '<tr>' +
+      '<td>' + d.id + '</td>' +
+      '<td>' + d.cat + '</td>' +
+      '<td>' + d.brand + '</td>' +
+      '<td>' + fmt(d.avgPrice) + '</td>' +
+      '<td style="color:#64748b">' + fmt(d.avgBase) + '</td>' +
+      '<td style="font-weight:600">' + fmt(d.sugPrice) + '</td>' +
+      '<td><span class="' + chgCls + '">' + sign + d.chgPct.toFixed(1) + '%</span></td>' +
+      '<td>' + actBadge(d.action) + '</td>' +
+      '<td>' + urgBadge(d.urgency) + '</td>' +
+      '<td>' + d.profPct.toFixed(1) + '%</td>' +
+      '<td>' + d.demand + '</td>' +
+      '<td>' + d.monthlyQty.toFixed(1) + '</td>' +
+      '<td title="' + d.reason + '" style="max-width:220px;overflow:hidden;text-overflow:ellipsis">' + d.reason + '</td>' +
+      '</tr>';
+  }).join('');
+
+  document.getElementById('empty').style.display = FILTERED.length === 0 ? '' : 'none';
+  document.getElementById('cnt').textContent = FILTERED.length.toLocaleString() + ' бүтээгдэхүүн';
+}
+
+function toCSVRow(d) {
+  return [
+    d.id, d.cat, d.brand,
+    Math.round(d.avgPrice), Math.round(d.avgBase), Math.round(d.cost),
+    Math.round(d.sugPrice), d.chgPct.toFixed(1),
+    d.action, d.urgency,
+    d.profPct.toFixed(1), d.demand,
+    d.monthlyQty.toFixed(1), d.totalQty, d.months,
+    '"' + (d.reason || '').replace(/"/g, '""') + '"'
+  ].join(',');
+}
+
+function downloadCSV(mode) {
+  const rows = mode === 'all' ? DATA : FILTERED;
+  if (!rows.length) { showToast('Татах өгөгдөл алга'); return; }
+
+  const header = 'бараа_дугаар,ангилал,брэнд,одоогийн_үнэ,суурь_үнэ,өртөг,санал_болгох_үнэ,өөрчлөлтийн_хувь,үйлдэл,яаралтай,ашгийн_хувь,эрэлтийн_түвшин,сарын_дундаж_тоо,нийт_тоо,идэвхтэй_сар,шалтгаан';
+  const csv  = '\uFEFF' + header + '\n' + rows.map(toCSVRow).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const ts   = new Date().toISOString().slice(0, 10);
+  a.href     = url;
+  a.download = 'үнийн_санал_' + (mode === 'all' ? 'бүгд' : 'шүүгдсэн') + '_' + ts + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast(rows.length.toLocaleString() + ' бүтээгдэхүүний мэдээлэл татагдлаа ✓');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>
