@@ -17,3 +17,6 @@ Internship project
 - CSV өгөгдлийн бүтцийг гаргах
 - API эсвэл model алийг нь ашиглахаа шийдэх
 
+- UI дизайныг HMTL хэл дээр хийх
+- gemini api key ашиглах
+
